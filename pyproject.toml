@@ -1,0 +1,13 @@
+[project]
+name = "dtm-differ"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "rasterio>=1.4.4",
+    "xdem>=0.1.6",
+]
+
+[project.scripts]
+dtm-differ = "dtm_differ.cli:main"
