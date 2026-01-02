@@ -62,7 +62,9 @@ def test_compute_rasters_ranking() -> None:
     with patch("dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff):
         rasters = compute_rasters(AlignedDems(a_dem=a_dem, b_dem=b_dem, reprojection_info=reproj_info), ProcessingConfig())
 
-    expected = np.array([[0, 1], [2, 3]], dtype=np.uint8)
+    # Default config enables uncertainty and suppresses ranks within noise,
+    # so the -1.5 m cell is suppressed (|dh| <= k*sigma_dh).
+    expected = np.array([[0, 0], [2, 3]], dtype=np.uint8)
     assert np.array_equal(rasters.movement_rank, expected)
     assert rasters.movement_rank.dtype == np.uint8
     assert rasters.output_mask.dtype == np.bool_

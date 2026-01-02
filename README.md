@@ -116,16 +116,17 @@ output/
 │   ├── diff.tif                    # Raw difference (A - B)
 │   ├── elevation_change.tif         # Elevation change (with nodata handling)
 │   ├── change_magnitude.tif        # Absolute elevation change
-│   ├── change_direction.tif        # Direction: -1 (subsidence), 0 (no change), 1 (uplift)
+│   ├── change_direction.tif        # Direction: -1 (subsidence), 0 (not detectable/no change), 1 (uplift)
 │   ├── slope_degrees.tif           # Slope angle in degrees
 │   ├── movement_rank.tif            # Risk classification (0=unclassified, 1=green, 2=amber, 3=red)
 │   └── movement_ranked_polygons.shp # Shapefile of ranked areas (if generated)
 └── reports/             # Visualisations and HTML report
-    ├── report.html                  # Interactive HTML report
-    ├── movement_magnitude_green_to_red.png
-    ├── elevation_change_diverging.png
-    ├── slope_degrees.png
-    ├── movement_direction.png
+	    ├── report.html                  # Interactive HTML report
+	    ├── metrics.json                 # Machine-readable QA metrics + run configuration
+	    ├── movement_magnitude_green_to_red.png
+	    ├── elevation_change_diverging.png
+	    ├── slope_degrees.png
+	    ├── movement_direction.png
     └── movement_rank.png
 ```
 
@@ -138,7 +139,7 @@ output/
 - **`change_magnitude.tif`**: Absolute value of elevation change. Useful for identifying areas of significant movement regardless of direction.
 - **`change_direction.tif`**: Direction of change:
   - `-1`: Subsidence/erosion (elevation decreased)
-  - `0`: No significant change
+  - `0`: Not detectable at the chosen uncertainty threshold (or exactly zero when uncertainty is disabled)
   - `1`: Uplift/deposition (elevation increased)
 - **`slope_degrees.tif`**: Slope angle in degrees, calculated from DTM A.
 - **`movement_rank.tif`**: Risk classification based on magnitude thresholds:
@@ -312,12 +313,12 @@ Default thresholds (1.0, 3.0, 6.0 meters) are suitable for many geotechnical app
 
 ### Interpreting "No Change" Results
 
-The `change_direction.tif` and `movement_rank.tif` files use value `0` to indicate "no significant change", but the interpretation depends on whether uncertainty analysis was performed:
+The `change_direction.tif` and `movement_rank.tif` files use value `0` to indicate a "no-change / not-detectable" outcome, but the interpretation depends on whether uncertainty analysis was performed:
 
 **When uncertainty analysis is enabled** (recommended):
-- **Reliable "no change"**: Areas with small magnitude changes AND high z-scores (|z| ≥ k) indicate confidently detected stability
-- **Uncertain "no change"**: Areas with small magnitude changes but low z-scores (|z| < k) may be within noise - the "no change" classification is less reliable
-- Check the `within_noise_mask.tif` to see areas where changes are not detectable at the chosen confidence level
+- `change_direction.tif == 0` indicates the change is **not detectable** at the chosen k threshold (|z| < k)
+- `movement_rank.tif == 0` means either the magnitude is below the green threshold, or the rank was suppressed because it is within noise
+- Check `z_score.tif` and `within_noise_mask.tif` to interpret confidence and detectability
 
 **When uncertainty analysis is disabled** (not recommended):
 - "No change" (rank 0) simply means the magnitude is below the green threshold

@@ -18,11 +18,13 @@ def run_pipeline(
 
     stages.validate_inputs(inputs)
     a_info, a_dem, b_info, b_dem = stages.load_dems(inputs)
+    stages.warn_if_threshold_units_may_be_wrong(a_info, b_info)
     stages.validate_data_quality(a_dem, b_dem)
     aligned = stages.align_dems(a_info, a_dem, b_info, b_dem, config)
     rasters = stages.compute_rasters(aligned, config)
 
     stages.save_geotiff_outputs(rasters, ws, generate_polygons=config.generate_polygons)
+    stages.save_metrics(rasters, ws, config, a_info, b_info)
 
     if config.generate_report:
         try:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -20,7 +21,7 @@ from dtm_differ.geotiff import (
     validate_geotiff,
 )
 from dtm_differ.raster import (
-    generate_change_direction_raster,
+    generate_change_direction_from_dh,
     generate_change_magnitude_raster,
     generate_difference_raster,
     generate_difference_sigma_constant,
@@ -44,6 +45,231 @@ from dtm_differ.viz import (
 )
 
 from .types import AlignedDems, DerivedRasters, Inputs, ProcessingConfig, Workspace
+
+
+def _finite(values: NDArray[np.floating]) -> NDArray[np.floating]:
+    arr = np.asarray(values, dtype=np.float32)
+    return arr[np.isfinite(arr)]
+
+
+def _compute_dh_metrics(
+    dh: NDArray[np.floating], *, valid_mask: NDArray[np.bool_]
+) -> dict[str, float | int]:
+    total_count = int(valid_mask.size)
+    valid_count = int(np.sum(valid_mask))
+    valid_fraction = (valid_count / total_count) if total_count else 0.0
+
+    finite_dh = _finite(dh[valid_mask])
+    metrics: dict[str, float | int] = {
+        "n_total": total_count,
+        "n_valid": valid_count,
+        "valid_fraction": float(valid_fraction),
+    }
+
+    if finite_dh.size == 0:
+        return metrics
+
+    abs_dh = np.abs(finite_dh)
+    median = float(np.median(finite_dh))
+    mad = float(np.median(np.abs(finite_dh - median)))
+
+    metrics.update(
+        {
+            "mean_m": float(np.mean(finite_dh)),
+            "median_m": median,
+            "std_m": float(np.std(finite_dh)),
+            "rmse_m": float(np.sqrt(np.mean(finite_dh**2))),
+            "mae_m": float(np.mean(abs_dh)),
+            "nmad_m": float(1.4826 * mad),
+            "min_m": float(np.min(finite_dh)),
+            "max_m": float(np.max(finite_dh)),
+            "p25_m": float(np.percentile(finite_dh, 25)),
+            "p50_m": float(np.percentile(finite_dh, 50)),
+            "p75_m": float(np.percentile(finite_dh, 75)),
+            "p95_m": float(np.percentile(finite_dh, 95)),
+            "p99_m": float(np.percentile(finite_dh, 99)),
+        }
+    )
+    return metrics
+
+
+def _save_metrics_json(out_path: Path, payload: dict) -> None:
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+def _build_metrics_payload(
+    r: DerivedRasters,
+    config: ProcessingConfig,
+    *,
+    a_info=None,
+    b_info=None,
+) -> dict:
+    valid_mask = ~r.output_mask
+    dh_metrics = _compute_dh_metrics(r.elevation_change, valid_mask=valid_mask)
+
+    coreg_metrics: dict[str, float | int] | None = None
+    if r.reprojection_info.occurred:
+        coreg_metrics = _estimate_planar_trend_metrics(
+            r.elevation_change, valid_mask=valid_mask, transform=r.diff.transform
+        )
+
+    return {
+        "dh_metrics": dh_metrics,
+        "coregistration_check": coreg_metrics,
+        "thresholds_m": {
+            "green": config.t_green,
+            "amber": config.t_amber,
+            "red": config.t_red,
+        },
+        "uncertainty": {
+            "mode": config.uncertainty_mode,
+            "sigma_a_m": config.sigma_a,
+            "sigma_b_m": config.sigma_b,
+            "sigma_coreg_m": config.sigma_coreg,
+            "k_sigma": config.k_sigma,
+            "suppress_within_noise_rank": config.suppress_within_noise_rank,
+        },
+        "alignment": {
+            "occurred": r.reprojection_info.occurred,
+            "align": config.align,
+            "resample": config.resample,
+            "reason": r.reprojection_info.reason,
+            "source_crs_a": r.reprojection_info.source_crs_a,
+            "source_crs_b": r.reprojection_info.source_crs_b,
+            "target_crs": r.reprojection_info.target_crs,
+            "reference_grid": r.reprojection_info.reference_grid,
+        },
+        "inputs": {
+            "a_name": getattr(getattr(a_info, "path", None), "name", None),
+            "b_name": getattr(getattr(b_info, "path", None), "name", None),
+            "a_crs": getattr(a_info, "crs", None),
+            "b_crs": getattr(b_info, "crs", None),
+            "a_linear_unit_name": getattr(a_info, "linear_unit_name", None),
+            "b_linear_unit_name": getattr(b_info, "linear_unit_name", None),
+            "a_linear_unit_factor": getattr(a_info, "linear_unit_factor", None),
+            "b_linear_unit_factor": getattr(b_info, "linear_unit_factor", None),
+        },
+    }
+
+
+def save_metrics(
+    r: DerivedRasters, ws: Workspace, config: ProcessingConfig, a_info=None, b_info=None
+) -> dict:
+    """
+    Write machine-readable processing metrics to `reports/metrics.json`.
+
+    This is created even when `generate_report=False` so downstream workflows can
+    consume QA metrics without parsing HTML.
+    """
+    payload = _build_metrics_payload(r, config, a_info=a_info, b_info=b_info)
+    _save_metrics_json(ws.reports_dir / "metrics.json", payload)
+    return payload
+
+
+def warn_if_threshold_units_may_be_wrong(a_info, b_info) -> None:
+    """
+    Best-effort warning about CRS linear units vs. meter-based threshold assumptions.
+
+    Notes:
+        GeoTIFFs rarely declare vertical units explicitly. We therefore check CRS *linear*
+        units as a proxy signal and warn when they are clearly non-metric (e.g., feet or degrees).
+    """
+
+    def describe(info) -> str:
+        unit = getattr(info, "linear_unit_name", None)
+        factor = getattr(info, "linear_unit_factor", None)
+        if unit is None:
+            return "unknown"
+        if factor is None:
+            return str(unit)
+        return f"{unit} (factor {factor:g})"
+
+    def is_meter_like(info) -> bool:
+        unit = getattr(info, "linear_unit_name", None)
+        factor = getattr(info, "linear_unit_factor", None)
+        if unit is None:
+            return False
+        unit_l = str(unit).lower()
+        if unit_l in {"metre", "meter", "metres", "meters", "m"}:
+            return True
+        if factor is not None and abs(float(factor) - 1.0) < 1e-6:
+            return True
+        return False
+
+    def is_degree_like(info) -> bool:
+        unit = getattr(info, "linear_unit_name", None)
+        if unit is None:
+            return False
+        return "degree" in str(unit).lower()
+
+    if is_degree_like(a_info) or is_degree_like(b_info):
+        print("⚠️  WARNING: One or both DEM CRSs use degree-based units.")
+        print(f"   DEM A CRS units: {describe(a_info)}")
+        print(f"   DEM B CRS units: {describe(b_info)}")
+        print(
+            "   Thresholds are specified in meters and slope/distance calculations assume linear units; "
+            "consider reprojecting to a projected CRS (meters) and verifying vertical units."
+        )
+        return
+
+    if not (is_meter_like(a_info) and is_meter_like(b_info)):
+        print("⚠️  WARNING: Could not confirm both DEM CRSs use meter-based units.")
+        print(f"   DEM A CRS units: {describe(a_info)}")
+        print(f"   DEM B CRS units: {describe(b_info)}")
+        print(
+            "   Thresholds are specified in meters. GeoTIFF CRS units are a proxy for horizontal units; "
+            "vertical units may still differ. Verify your DEM vertical units before interpreting thresholds."
+        )
+
+
+def _estimate_planar_trend_metrics(
+    dh: NDArray[np.floating], *, valid_mask: NDArray[np.bool_], transform
+) -> dict[str, float | int] | None:
+    """
+    Estimate a best-fit plane (a*x + b*y + c) through dh for co-registration diagnostics.
+
+    Returns:
+        A dict of plane coefficients and residual metrics, or None if insufficient data.
+    """
+    valid = valid_mask & np.isfinite(dh)
+    flat = np.flatnonzero(valid)
+    if flat.size < 3:
+        return None
+
+    max_samples = 200_000
+    step = max(1, int(flat.size // max_samples))
+    flat = flat[::step]
+    rows, cols = np.unravel_index(flat, dh.shape)
+
+    a = float(getattr(transform, "a"))
+    b = float(getattr(transform, "b"))
+    c = float(getattr(transform, "c"))
+    d = float(getattr(transform, "d"))
+    e = float(getattr(transform, "e"))
+    f = float(getattr(transform, "f"))
+
+    x = (a * cols + b * rows + c).astype(np.float64, copy=False)
+    y = (d * cols + e * rows + f).astype(np.float64, copy=False)
+    z = np.asarray(dh[rows, cols], dtype=np.float64)
+
+    design = np.column_stack([x, y, np.ones_like(x)])
+    coeffs, *_ = np.linalg.lstsq(design, z, rcond=None)
+    plane = design @ coeffs
+    residual = z - plane
+
+    ax, by, intercept = (float(coeffs[0]), float(coeffs[1]), float(coeffs[2]))
+    tilt = float(np.sqrt(ax**2 + by**2))
+    tilt_angle_deg = float(np.degrees(np.arctan(tilt)))
+
+    return {
+        "n_samples": int(z.size),
+        "plane_ax_m_per_unit": ax,
+        "plane_by_m_per_unit": by,
+        "plane_intercept_m": intercept,
+        "tilt_m_per_unit": tilt,
+        "tilt_angle_deg": tilt_angle_deg,
+        "residual_mean_m": float(np.mean(residual)),
+        "residual_rmse_m": float(np.sqrt(np.mean(residual**2))),
+    }
 
 
 def make_workspace(out_dir: Path) -> Workspace:
@@ -170,8 +396,12 @@ def compute_rasters(aligned: AlignedDems, config: ProcessingConfig) -> DerivedRa
             elevation_change, sigma_dh, output_mask=output_mask, k_sigma=config.k_sigma
         )
 
-    change_direction = generate_change_direction_raster(diff)
-    change_direction[output_mask] = 0
+    change_direction = generate_change_direction_from_dh(
+        elevation_change,
+        output_mask=output_mask,
+        sigma_dh=sigma_dh if config.uncertainty_mode != "none" else None,
+        k_sigma=config.k_sigma if config.uncertainty_mode != "none" else None,
+    )
 
     change_magnitude = generate_change_magnitude_raster(diff)
     change_magnitude[output_mask] = np.nan
@@ -339,11 +569,23 @@ def generate_report(
 
     # Build processing metadata HTML
     processing_items = []
+
+    metrics_payload = _build_metrics_payload(r, config, a_info=a_info, b_info=b_info)
+    dh_metrics = metrics_payload["dh_metrics"]
+    coreg_metrics = metrics_payload["coregistration_check"]
     
     # Input file information
     if a_info and b_info:
         processing_items.append(f"<li><strong>Input DEM A:</strong> {a_info.path.name} (CRS: {a_info.crs})</li>")
         processing_items.append(f"<li><strong>Input DEM B:</strong> {b_info.path.name} (CRS: {b_info.crs})</li>")
+        if getattr(a_info, "linear_unit_name", None):
+            processing_items.append(
+                f"<li><strong>DEM A linear units:</strong> {a_info.linear_unit_name}</li>"
+            )
+        if getattr(b_info, "linear_unit_name", None):
+            processing_items.append(
+                f"<li><strong>DEM B linear units:</strong> {b_info.linear_unit_name}</li>"
+            )
     
     # Output CRS
     if r.diff.crs:
@@ -387,26 +629,54 @@ def generate_report(
     
     # Add statistical summary
     valid_mask = ~r.output_mask
-    valid_count = int(np.sum(valid_mask))
-    total_count = int(r.output_mask.size)
-    valid_pct = (valid_count / total_count * 100.0) if total_count > 0 else 0.0
-    processing_items.append(f"<li><strong>Valid pixels:</strong> {valid_pct:.1f}% ({valid_count:,} of {total_count:,})</li>")
-    
-    # Elevation change statistics
-    valid_dh = r.elevation_change[valid_mask]
-    valid_dh = valid_dh[np.isfinite(valid_dh)]
-    if len(valid_dh) > 0:
-        mean_dh = float(np.mean(valid_dh))
-        std_dh = float(np.std(valid_dh))
-        p25 = float(np.percentile(valid_dh, 25))
-        p50 = float(np.percentile(valid_dh, 50))
-        p75 = float(np.percentile(valid_dh, 75))
-        p95 = float(np.percentile(valid_dh, 95))
-        p99 = float(np.percentile(valid_dh, 99))
+    valid_pct = float(dh_metrics["valid_fraction"]) * 100.0
+    processing_items.append(
+        f"<li><strong>Valid pixels:</strong> {valid_pct:.1f}% ({dh_metrics['n_valid']:,} of {dh_metrics['n_total']:,})</li>"
+    )
+
+    if coreg_metrics is not None:
+        processing_items.append(
+            "<li><strong>Co-registration check (planar trend in dh):</strong></li>"
+        )
+        processing_items.append(
+            "<li style='margin-left: 20px;'>"
+            f"Samples: {coreg_metrics['n_samples']:,}, "
+            f"Residual RMSE: {coreg_metrics['residual_rmse_m']:.3f} m"
+            "</li>"
+        )
+        processing_items.append(
+            "<li style='margin-left: 20px;'>"
+            f"Tilt magnitude: {coreg_metrics['tilt_m_per_unit']:.3e} m/unit "
+            f"(tilt angle ~ {coreg_metrics['tilt_angle_deg']:.4f}°)"
+            "</li>"
+        )
+
+    if "mean_m" in dh_metrics:
         processing_items.append("<li><strong>Elevation change statistics (dh):</strong></li>")
-        processing_items.append(f"<li style='margin-left: 20px;'>Mean: {mean_dh:+.3f} m</li>")
-        processing_items.append(f"<li style='margin-left: 20px;'>Std dev: {std_dh:.3f} m</li>")
-        processing_items.append(f"<li style='margin-left: 20px;'>Percentiles: 25th={p25:+.3f}, 50th={p50:+.3f}, 75th={p75:+.3f}, 95th={p95:+.3f}, 99th={p99:+.3f} m</li>")
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>Mean (bias): {dh_metrics['mean_m']:+.3f} m</li>"
+        )
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>Median: {dh_metrics['median_m']:+.3f} m</li>"
+        )
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>Std dev: {dh_metrics['std_m']:.3f} m</li>"
+        )
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>RMSE: {dh_metrics['rmse_m']:.3f} m</li>"
+        )
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>MAE: {dh_metrics['mae_m']:.3f} m</li>"
+        )
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>NMAD: {dh_metrics['nmad_m']:.3f} m</li>"
+        )
+        processing_items.append(
+            "<li style='margin-left: 20px;'>"
+            f"Percentiles: 25th={dh_metrics['p25_m']:+.3f}, 50th={dh_metrics['p50_m']:+.3f}, "
+            f"75th={dh_metrics['p75_m']:+.3f}, 95th={dh_metrics['p95_m']:+.3f}, 99th={dh_metrics['p99_m']:+.3f} m"
+            "</li>"
+        )
     
     # Movement rank distribution
     valid_rank = r.movement_rank[valid_mask]
@@ -414,12 +684,21 @@ def generate_report(
     rank_1 = int(np.sum(valid_rank == 1))
     rank_2 = int(np.sum(valid_rank == 2))
     rank_3 = int(np.sum(valid_rank == 3))
-    if valid_count > 0:
+    if int(dh_metrics["n_valid"]) > 0:
         processing_items.append("<li><strong>Movement rank distribution:</strong></li>")
-        processing_items.append(f"<li style='margin-left: 20px;'>Unclassified (0): {rank_0:,} ({rank_0/valid_count*100:.1f}%)</li>")
-        processing_items.append(f"<li style='margin-left: 20px;'>Green (1): {rank_1:,} ({rank_1/valid_count*100:.1f}%)</li>")
-        processing_items.append(f"<li style='margin-left: 20px;'>Amber (2): {rank_2:,} ({rank_2/valid_count*100:.1f}%)</li>")
-        processing_items.append(f"<li style='margin-left: 20px;'>Red (3): {rank_3:,} ({rank_3/valid_count*100:.1f}%)</li>")
+        valid_n = int(dh_metrics["n_valid"])
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>Unclassified (0): {rank_0:,} ({rank_0/valid_n*100:.1f}%)</li>"
+        )
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>Green (1): {rank_1:,} ({rank_1/valid_n*100:.1f}%)</li>"
+        )
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>Amber (2): {rank_2:,} ({rank_2/valid_n*100:.1f}%)</li>"
+        )
+        processing_items.append(
+            f"<li style='margin-left: 20px;'>Red (3): {rank_3:,} ({rank_3/valid_n*100:.1f}%)</li>"
+        )
     
     if processing_items:
         processing_html = f"<ul>{''.join(processing_items)}</ul>"
@@ -447,8 +726,14 @@ def generate_report(
     images.append(ReportImage(slope_png, "Slope (degrees)"))
 
     dir_png = "movement_direction.png"
+    zero_label = "No change (dh = 0)"
+    if config.uncertainty_mode != "none":
+        zero_label = f"Not detectable (|z| < {config.k_sigma:g})"
     save_direction_png(
-        r.change_direction, nodata_mask=r.output_mask, out_path=ws.reports_dir / dir_png
+        r.change_direction,
+        nodata_mask=r.output_mask,
+        out_path=ws.reports_dir / dir_png,
+        zero_label=zero_label,
     )
     images.append(ReportImage(dir_png, "Direction of movement"))
 

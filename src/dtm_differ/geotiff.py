@@ -3,11 +3,11 @@ from typing import Literal
 
 import numpy as np
 import rasterio
+from rasterio.errors import CRSError
 from rasterio.errors import RasterioIOError
 
 from dtm_differ.types import GeoTiffBounds, GeotiffInformation, RasterCompatability
 import xdem
-import numpy as np
 
 
 def validate_geotiff(geotiff_path: str) -> None:
@@ -53,6 +53,16 @@ def get_geotiff_metadata(geotiff_path: str) -> tuple[GeotiffInformation, xdem.DE
     """
     file_path = Path(geotiff_path)
     with rasterio.open(file_path) as src:
+        unit_name: str | None = None
+        unit_factor: float | None = None
+        if src.crs is not None:
+            unit_name = getattr(src.crs, "linear_units", None)
+            try:
+                unit_factor = getattr(src.crs, "linear_units_factor", None)
+            except CRSError:
+                # Geographic/non-projected CRSs can raise for linear units factor.
+                unit_factor = None
+
         return GeotiffInformation(
             path=file_path,
             crs=src.crs.to_string(),
@@ -62,34 +72,42 @@ def get_geotiff_metadata(geotiff_path: str) -> tuple[GeotiffInformation, xdem.DE
             transform=src.transform,
             dtype=str(src.dtypes[0]),
             nodata=src.nodata,
+            linear_unit_name=unit_name,
+            linear_unit_factor=float(unit_factor) if unit_factor is not None else None,
         ), xdem.DEM(geotiff_path)
 
 
-def validate_dem_data(dem: xdem.DEM, *, min_valid_fraction: float = 0.01) -> tuple[bool, str]:
+def validate_dem_data(dem: xdem.DEM, min_valid_pixels: float = 0.01) -> tuple[bool, str]:
     """
-    Lightweight data-quality check to avoid processing empty/invalid DEMs.
+    Validate that a DEM has sufficient valid (finite, non-nodata) data.
+
+    Args:
+        dem: DEM to validate.
+        min_valid_pixels: Minimum fraction of pixels that must be valid (default 1%).
 
     Returns:
-        (is_valid, message)
+        Tuple of (is_valid, message).
     """
     data = np.asarray(dem.data, dtype=float)
     if data.size == 0:
         return False, "empty raster"
 
-    mask = np.isfinite(data)
+    valid = np.isfinite(data)
     if dem.nodata is not None:
-        mask &= data != float(dem.nodata)
+        valid &= data != float(dem.nodata)
 
-    valid = int(mask.sum())
-    total = int(data.size)
-    if valid == 0:
+    valid_pixels = int(valid.sum())
+    total_pixels = int(data.size)
+    if valid_pixels == 0:
         return False, "no finite, non-nodata cells"
 
-    frac = valid / total if total else 0.0
-    if frac < min_valid_fraction:
-        return False, f"valid fraction too low ({frac:.3%} < {min_valid_fraction:.3%})"
-
-    return True, f"valid fraction {frac:.3%}"
+    valid_fraction = valid_pixels / total_pixels if total_pixels else 0.0
+    if valid_fraction < float(min_valid_pixels):
+        return (
+            False,
+            f"Only {valid_fraction:.1%} of pixels are valid (minimum {min_valid_pixels:.1%})",
+        )
+    return True, f"{valid_fraction:.1%} of pixels are valid"
 
 
 def _bounds_overlap(a: GeoTiffBounds, b: GeoTiffBounds) -> bool:
@@ -153,27 +171,3 @@ def reproject_raster(
             return a.reproject(ref=b, resampling=resampling)
         case _:
             raise ValueError(f"Invalid direction: {direction}")
-
-
-
-def validate_dem_data(dem: xdem.DEM, min_valid_pixels: float = 0.01) -> tuple[bool, str]:
-    """
-          Validate that DEM has sufficient valid data.
-          
-          Args:
-              dem: DEM to validate
-              min_valid_pixels: Minimum fraction of pixels that must be valid (default 1%)
-          
-          Returns:
-              Tuple of (is_valid, message)
-    """
-    total_pixels = dem.data.size
-    if dem.nodata is not None:
-        valid_pixels = np.sum(dem.data != dem.nodata)
-    else:
-        valid_pixels = np.sum(np.isfinite(dem.data))
-          
-    valid_fraction = valid_pixels / total_pixels
-    if valid_fraction < min_valid_pixels:
-        return False, f"Only {valid_fraction:.1%} of pixels are valid (minimum {min_valid_pixels:.1%})"
-    return True, f"{valid_fraction:.1%} of pixels are valid"

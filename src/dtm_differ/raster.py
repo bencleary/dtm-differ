@@ -11,7 +11,6 @@ def generate_difference_raster(a: xdem.DEM, b: xdem.DEM) -> xdem.DEM:
         xdem.DEM: The difference raster
     """
     diff = a - b
-    diff.info(stats=True)
     return diff
 
 
@@ -95,6 +94,42 @@ def generate_change_direction_raster(diff: xdem.DEM) -> NDArray[np.int8]:
     return direction
 
 
+def generate_change_direction_from_dh(
+    dh: NDArray[np.floating],
+    *,
+    output_mask: NDArray[np.bool_],
+    sigma_dh: NDArray[np.floating] | None = None,
+    k_sigma: float | None = None,
+) -> NDArray[np.int8]:
+    """
+    Generate a direction raster (-1, 0, 1) from a dh array.
+
+    If sigma is provided, only changes that are *detectable* at the chosen k threshold
+    are assigned a direction; otherwise direction is 0.
+
+    Args:
+        dh: Elevation change array in meters (NaN for nodata).
+        output_mask: Boolean mask where outputs should be treated as nodata.
+        sigma_dh: Per-pixel 1σ uncertainty for dh (meters).
+        k_sigma: Detectability multiplier k; changes are detectable if |dh| > k·σ.
+
+    Returns:
+        Direction array: -1 (negative), 0 (not detectable / no change), 1 (positive).
+    """
+    direction = np.zeros(dh.shape, dtype=np.int8)
+    valid = (~output_mask) & np.isfinite(dh)
+
+    if sigma_dh is not None and k_sigma is not None and float(k_sigma) > 0:
+        sigma_ok = np.isfinite(sigma_dh) & (sigma_dh > 0)
+        detectable = valid & sigma_ok & (np.abs(dh) > (float(k_sigma) * sigma_dh))
+    else:
+        detectable = valid & (dh != 0)
+
+    direction[detectable & (dh > 0)] = 1
+    direction[detectable & (dh < 0)] = -1
+    return direction
+
+
 def generate_change_magnitude_raster(diff: xdem.DEM) -> NDArray[np.floating]:
     """
     Generate a change magnitude raster from a difference raster.
@@ -144,6 +179,10 @@ def generate_ranked_movement_raster(
 def generate_slope_degrees_raster(dem: xdem.DEM) -> NDArray[np.floating]:
     """
     Estimate slope angle (degrees) from a DEM using finite differences.
+
+    Notes:
+        This implementation is nodata-aware: it avoids differencing across NaN/nodata
+        boundaries by falling back to forward/backward differences when needed.
     """
     try:
         dx, dy = dem.res
@@ -166,10 +205,54 @@ def generate_slope_degrees_raster(dem: xdem.DEM) -> NDArray[np.floating]:
     if dem.nodata is not None:
         z[z == dem.nodata] = np.nan
 
-    dzdy, dzdx = np.gradient(z, dy, dx)
+    # Build 4-neighbour arrays with NaN padding at edges.
+    left = np.empty_like(z)
+    right = np.empty_like(z)
+    up = np.empty_like(z)
+    down = np.empty_like(z)
+
+    left[:, 0] = np.nan
+    left[:, 1:] = z[:, :-1]
+    right[:, -1] = np.nan
+    right[:, :-1] = z[:, 1:]
+    up[0, :] = np.nan
+    up[1:, :] = z[:-1, :]
+    down[-1, :] = np.nan
+    down[:-1, :] = z[1:, :]
+
+    z_finite = np.isfinite(z)
+    left_f = np.isfinite(left)
+    right_f = np.isfinite(right)
+    up_f = np.isfinite(up)
+    down_f = np.isfinite(down)
+
+    dzdx = np.full(z.shape, np.nan, dtype=np.float32)
+    dzdy = np.full(z.shape, np.nan, dtype=np.float32)
+
+    # Central difference when both neighbours exist; otherwise fallback to forward/backward.
+    central_x = left_f & right_f
+    forward_x = (~left_f) & right_f & z_finite
+    backward_x = left_f & (~right_f) & z_finite
+
+    dzdx[central_x] = ((right - left) / (2.0 * dx))[central_x].astype(
+        np.float32, copy=False
+    )
+    dzdx[forward_x] = ((right - z) / dx)[forward_x].astype(np.float32, copy=False)
+    dzdx[backward_x] = ((z - left) / dx)[backward_x].astype(np.float32, copy=False)
+
+    central_y = up_f & down_f
+    forward_y = (~up_f) & down_f & z_finite
+    backward_y = up_f & (~down_f) & z_finite
+
+    dzdy[central_y] = ((down - up) / (2.0 * dy))[central_y].astype(
+        np.float32, copy=False
+    )
+    dzdy[forward_y] = ((down - z) / dy)[forward_y].astype(np.float32, copy=False)
+    dzdy[backward_y] = ((z - up) / dy)[backward_y].astype(np.float32, copy=False)
+
     slope_rad = np.arctan(np.sqrt(dzdx**2 + dzdy**2))
     slope_deg = np.degrees(slope_rad)
 
-    slope_deg[~np.isfinite(z)] = np.nan
+    slope_deg[~z_finite] = np.nan
 
     return slope_deg

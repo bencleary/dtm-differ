@@ -195,6 +195,7 @@ def save_direction_png(
     nodata_mask: NDArray[np.bool_],
     out_path: Path,
     title: str = "Direction of movement",
+    zero_label: str = "No change (dh = 0)",
 ) -> None:
     _require_matplotlib()
     _prepare_matplotlib_cache(out_path.parent)
@@ -217,7 +218,7 @@ def save_direction_png(
     legend = [
         Patch(color="#E53935", label="Uplift / deposition (dh > 0)"),
         Patch(color="#1E88E5", label="Subsidence / erosion (dh < 0)"),
-        Patch(color="#BDBDBD", label="No change (dh = 0)"),
+        Patch(color="#BDBDBD", label=zero_label),
     ]
     ax.legend(
         handles=legend,

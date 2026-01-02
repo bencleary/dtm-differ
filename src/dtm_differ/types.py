@@ -16,6 +16,8 @@ class GeotiffInformation:
     transform: Affine
     dtype: str
     nodata: float | None
+    linear_unit_name: str | None = None
+    linear_unit_factor: float | None = None
 
 
 @dataclass(frozen=True)
