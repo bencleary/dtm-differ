@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from pathlib import Path
+
 from rasterio.transform import Affine
 
 type GeoTiffBounds = tuple[float, float, float, float]
+
 
 @dataclass(frozen=True)
 class GeotiffInformation:
@@ -13,12 +15,13 @@ class GeotiffInformation:
     height: int
     transform: Affine
     dtype: str
-    nodata: float
+    nodata: float | None
+
 
 @dataclass(frozen=True)
 class RasterCompatability:
     same_crs: bool
-    same_grid: bool          # transform + width/height
+    same_grid: bool  # transform + width/height
     same_transform: bool
     same_shape: bool
     overlaps: bool

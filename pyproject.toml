@@ -6,8 +6,18 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "rasterio>=1.4.4",
+    "tqdm>=4.67.1",
     "xdem>=0.1.6",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7.0", "pytest-cov>=4.0"]
+
 [project.scripts]
 dtm-differ = "dtm_differ.cli:main"
+dtm-differ-generate-test-dtms = "dtm_differ.generate_test_dtms:generate_all_scenarios"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

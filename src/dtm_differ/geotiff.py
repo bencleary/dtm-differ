@@ -1,17 +1,23 @@
-from typing import Literal
-import rasterio
 from pathlib import Path
+from typing import Literal
+
+import numpy as np
+import rasterio
 from rasterio.errors import RasterioIOError
-from dtm_differ.types import GeotiffInformation, RasterCompatability, GeoTiffBounds
+
+from dtm_differ.types import GeoTiffBounds, GeotiffInformation, RasterCompatability
 import xdem
 import numpy as np
 
 
-def validate_geotiff(geotiff_path: str):
+def validate_geotiff(geotiff_path: str) -> None:
     """
     Validate a GeoTIFF file.
 
-    Throws:
+    Args:
+        geotiff_path: Path to the GeoTIFF file to validate
+
+    Raises:
         ValueError: If the GeoTIFF file is not valid
     """
 
@@ -57,6 +63,33 @@ def get_geotiff_metadata(geotiff_path: str) -> tuple[GeotiffInformation, xdem.DE
             dtype=str(src.dtypes[0]),
             nodata=src.nodata,
         ), xdem.DEM(geotiff_path)
+
+
+def validate_dem_data(dem: xdem.DEM, *, min_valid_fraction: float = 0.01) -> tuple[bool, str]:
+    """
+    Lightweight data-quality check to avoid processing empty/invalid DEMs.
+
+    Returns:
+        (is_valid, message)
+    """
+    data = np.asarray(dem.data, dtype=float)
+    if data.size == 0:
+        return False, "empty raster"
+
+    mask = np.isfinite(data)
+    if dem.nodata is not None:
+        mask &= data != float(dem.nodata)
+
+    valid = int(mask.sum())
+    total = int(data.size)
+    if valid == 0:
+        return False, "no finite, non-nodata cells"
+
+    frac = valid / total if total else 0.0
+    if frac < min_valid_fraction:
+        return False, f"valid fraction too low ({frac:.3%} < {min_valid_fraction:.3%})"
+
+    return True, f"valid fraction {frac:.3%}"
 
 
 def _bounds_overlap(a: GeoTiffBounds, b: GeoTiffBounds) -> bool:

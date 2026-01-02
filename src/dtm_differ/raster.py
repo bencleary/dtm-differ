@@ -15,6 +15,47 @@ def generate_difference_raster(a: xdem.DEM, b: xdem.DEM) -> xdem.DEM:
     return diff
 
 
+def generate_difference_sigma_constant(
+    shape: tuple[int, int],
+    *,
+    output_mask: NDArray[np.bool_],
+    sigma_a: float,
+    sigma_b: float,
+    sigma_coreg: float,
+) -> NDArray[np.floating]:
+    sigma = float(np.sqrt(sigma_a**2 + sigma_b**2 + sigma_coreg**2))
+    sigma_dh = np.full(shape, sigma, dtype=np.float32)
+    sigma_dh[output_mask] = np.nan
+    return sigma_dh
+
+
+def generate_z_score(
+    dh: NDArray[np.floating],
+    sigma_dh: NDArray[np.floating],
+    *,
+    output_mask: NDArray[np.bool_],
+) -> NDArray[np.floating]:
+    z = np.full_like(dh, np.nan, dtype=np.float32)
+    valid = (~output_mask) & np.isfinite(dh) & np.isfinite(sigma_dh) & (sigma_dh > 0)
+    z[valid] = (dh[valid] / sigma_dh[valid]).astype(np.float32, copy=False)
+    return z
+
+
+def generate_within_noise_mask_u8(
+    dh: NDArray[np.floating],
+    sigma_dh: NDArray[np.floating],
+    *,
+    output_mask: NDArray[np.bool_],
+    k_sigma: float,
+) -> NDArray[np.uint8]:
+    within = np.zeros(dh.shape, dtype=np.uint8)
+    valid = (~output_mask) & np.isfinite(dh) & np.isfinite(sigma_dh) & (sigma_dh > 0)
+    within[valid] = (np.abs(dh[valid]) <= (float(k_sigma) * sigma_dh[valid])).astype(
+        np.uint8
+    )
+    return within
+
+
 def generate_elevation_change_raster(diff: xdem.DEM) -> NDArray[np.floating]:
     """
     Generate an elevation change raster from a difference raster.
@@ -22,7 +63,13 @@ def generate_elevation_change_raster(diff: xdem.DEM) -> NDArray[np.floating]:
     Returns:
         NDArray[np.floating]: The elevation change array (nodata converted to NaN)
     """
-    elevation_change = diff.data.astype(float)
+    data = diff.data
+    # Convert masked array to regular array with NaN
+    if np.ma.isMaskedArray(data):
+        elevation_change = np.ma.filled(data.astype(float), np.nan)
+    else:
+        elevation_change = data.astype(float)
+
     nodata = diff.nodata
     if nodata is not None:
         elevation_change[elevation_change == nodata] = np.nan
@@ -37,8 +84,14 @@ def generate_change_direction_raster(diff: xdem.DEM) -> NDArray[np.int8]:
         NDArray[np.int8]: The change direction array (-1, 0, 1)
     """
     direction = np.zeros_like(diff.data, dtype=np.int8)
-    direction[diff.data > 0] = 1
-    direction[diff.data < 0] = -1
+    if diff.nodata is None:
+        direction[diff.data > 0] = 1
+        direction[diff.data < 0] = -1
+        return direction
+
+    nodata_mask = diff.data == diff.nodata
+    direction[(diff.data > 0) & ~nodata_mask] = 1
+    direction[(diff.data < 0) & ~nodata_mask] = -1
     return direction
 
 
@@ -47,12 +100,18 @@ def generate_change_magnitude_raster(diff: xdem.DEM) -> NDArray[np.floating]:
     Generate a change magnitude raster from a difference raster.
 
     Returns:
-        NDArray[np.floating]: The absolute elevation change array
+        NDArray[np.floating]: The absolute elevation change array (nodata converted to NaN)
     """
-    magnitude = np.abs(diff.data.astype(float))
-    nodata = diff.nodata
-    if nodata is not None:
-        magnitude[magnitude == nodata] = np.nan
+    data = diff.data
+    # Convert masked array to regular array with NaN
+    if np.ma.isMaskedArray(data):
+        data_float = np.ma.filled(data.astype(float), np.nan)
+    else:
+        data_float = data.astype(float)
+
+    magnitude = np.abs(data_float)
+    if diff.nodata is not None:
+        magnitude[diff.data == diff.nodata] = np.nan
     return magnitude
 
 
@@ -88,19 +147,29 @@ def generate_slope_degrees_raster(dem: xdem.DEM) -> NDArray[np.floating]:
     """
     try:
         dx, dy = dem.res
-    except (AttributeError, TypeError) as e:
+    except (AttributeError, TypeError, ValueError) as e:
         import warnings
+
         warnings.warn(f"Could not get DEM resolution, using 1.0: {e}")
         dx = dy = 1.0
 
     dx = float(abs(dx))
     dy = float(abs(dy))
-    z = dem.data.astype(float)
+
+    # Convert masked array to regular array with NaN
+    data = dem.data
+    if np.ma.isMaskedArray(data):
+        z = np.ma.filled(data.astype(float), np.nan)
+    else:
+        z = data.astype(float)
+
+    if dem.nodata is not None:
+        z[z == dem.nodata] = np.nan
+
     dzdy, dzdx = np.gradient(z, dy, dx)
     slope_rad = np.arctan(np.sqrt(dzdx**2 + dzdy**2))
     slope_deg = np.degrees(slope_rad)
 
-    if dem.nodata is not None:
-        slope_deg[z == dem.nodata] = np.nan
+    slope_deg[~np.isfinite(z)] = np.nan
 
     return slope_deg
