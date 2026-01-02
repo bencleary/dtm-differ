@@ -1,7 +1,7 @@
 [project]
 name = "dtm-differ"
 version = "0.1.0"
-description = "Add your description here"
+description = "DTM Differ is a Python package for comparing Digital Terrain Models (DTMs). It provides a command-line interface for generating test DTMs and comparing them."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

@@ -90,4 +90,4 @@ class ProcessingResult:
     sigma_dh: NDArray[np.floating] | None
     z_score: NDArray[np.floating] | None
     within_noise_mask: NDArray[np.uint8] | None
-
+    deferred_output: str | None = None

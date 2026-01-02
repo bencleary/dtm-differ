@@ -19,36 +19,6 @@ import xdem
 from dtm_differ.pipeline import run_pipeline
 from dtm_differ.pipeline.types import ProcessingConfig
 
-# Setup test environment (same as test_pipeline_stages.py)
-_repo_root = Path(__file__).resolve().parents[2]
-_test_cache_root = _repo_root / ".tmp" / "test-cache"
-(_test_cache_root / "mplconfig").mkdir(parents=True, exist_ok=True)
-(_test_cache_root / "xdg-cache").mkdir(parents=True, exist_ok=True)
-os.environ["MPLCONFIGDIR"] = str(_test_cache_root / "mplconfig")
-os.environ["XDG_CACHE_HOME"] = str(_test_cache_root / "xdg-cache")
-
-
-# Path to generated test DTMs
-TEST_DTM_DIR = _repo_root / "test_data" / "sample_dtms"
-
-
-@pytest.fixture
-def temp_output_dir():
-    """Create a temporary output directory for each test."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
-
-
-@pytest.fixture
-def test_dtm_dir():
-    """Get the test DTM directory, generating if needed."""
-    if not TEST_DTM_DIR.exists() or not list(TEST_DTM_DIR.glob("*.tif")):
-        pytest.skip(
-            f"Test DTMs not found in {TEST_DTM_DIR}. "
-            "Run 'make generate-test-dtms' to generate them."
-        )
-    return TEST_DTM_DIR
-
 
 def test_scenario1_basic_movement(temp_output_dir, test_dtm_dir):
     """Test Scenario 1: Basic movement patterns with no nodata."""
