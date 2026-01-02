@@ -375,10 +375,6 @@ The HTML report includes a confidence summary showing:
 
 [Add your license here]
 
-## Contributing
-
-[Add contribution guidelines here]
-
 ## Citation
 
 If you use this tool in your research, please cite:
