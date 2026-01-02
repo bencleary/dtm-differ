@@ -1,4 +1,4 @@
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 from pathlib import Path
 
 import xdem
@@ -70,6 +70,12 @@ def build_parser() -> ArgumentParser:
         "--no-suppress-within-noise-rank",
         action="store_true",
         help="Do not suppress movement_rank where |dh| <= k*sigma_dh.",
+    )
+    run.add_argument(
+        "--progress",
+        action=BooleanOptionalAction,
+        default=None,
+        help="Show progress bar (default: auto when interactive).",
     )
 
     status = subparsers.add_parser("status", help="Check job status")
@@ -153,6 +159,7 @@ def main() -> int:
                     k_sigma=args.k_sigma,
                     suppress_within_noise_rank=not args.no_suppress_within_noise_rank,
                 ),
+                progress=args.progress,
             )
 
             print(f"Wrote map layers to {result.map_layers_dir}")

@@ -10,6 +10,23 @@ from dtm_differ.types import GeoTiffBounds, GeotiffInformation, RasterCompatabil
 import xdem
 
 
+def _normalize_linear_units_factor(value: object) -> float | None:
+    """
+    Normalize rasterio CRS linear units factor across versions.
+
+    Rasterio may expose `CRS.linear_units_factor` as:
+    - a numeric factor (float/int)
+    - a tuple like (unit_name, factor)
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, tuple) and len(value) >= 2 and isinstance(value[1], (int, float)):
+        return float(value[1])
+    return None
+
+
 def validate_geotiff(geotiff_path: str) -> None:
     """
     Validate a GeoTIFF file.
@@ -58,10 +75,14 @@ def get_geotiff_metadata(geotiff_path: str) -> tuple[GeotiffInformation, xdem.DE
         if src.crs is not None:
             unit_name = getattr(src.crs, "linear_units", None)
             try:
-                unit_factor = getattr(src.crs, "linear_units_factor", None)
+                raw_factor = getattr(src.crs, "linear_units_factor", None)
             except CRSError:
                 # Geographic/non-projected CRSs can raise for linear units factor.
-                unit_factor = None
+                raw_factor = None
+            unit_factor = _normalize_linear_units_factor(raw_factor)
+            if unit_name is None and isinstance(raw_factor, tuple) and raw_factor:
+                if isinstance(raw_factor[0], str):
+                    unit_name = raw_factor[0]
 
         return GeotiffInformation(
             path=file_path,
@@ -73,7 +94,7 @@ def get_geotiff_metadata(geotiff_path: str) -> tuple[GeotiffInformation, xdem.DE
             dtype=str(src.dtypes[0]),
             nodata=src.nodata,
             linear_unit_name=unit_name,
-            linear_unit_factor=float(unit_factor) if unit_factor is not None else None,
+            linear_unit_factor=unit_factor,
         ), xdem.DEM(geotiff_path)
 
 
