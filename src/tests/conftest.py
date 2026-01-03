@@ -1,4 +1,5 @@
 import tempfile
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +7,8 @@ import pytest
 import xdem
 from numpy.typing import NDArray
 from rasterio.transform import from_bounds, from_origin
+
+from dtm_differ.db import Database
 
 _repo_root = Path(__file__).resolve().parents[2]
 
@@ -45,13 +48,6 @@ def make_test_dem(
     Handles the nodata/NaN dance that xdem requires: we convert nodata sentinel
     values and non-finite values to NaN before passing to xdem, which avoids
     spurious warnings during tests.
-
-    Args:
-        data: 2D elevation array.
-        nodata: Sentinel value to treat as missing data.
-        bounds: (xmin, ymin, xmax, ymax) for the raster extent.
-        crs: Coordinate reference system string.
-        use_origin: If True, use from_origin (pixel-size based) instead of from_bounds.
     """
     height, width = data.shape
 
@@ -73,3 +69,26 @@ def make_test_dem(
 @pytest.fixture
 def create_test_dem():
     return make_test_dem
+
+
+@pytest.fixture
+def db():
+    """Create a database with a temp file that persists across calls."""
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        db_path = f.name
+
+    database = Database(db_path)
+    database.initialise()
+    yield database
+
+    Path(db_path).unlink(missing_ok=True)
+
+
+# Alias for backwards compatibility with existing tests
+test_db = db
+
+
+@pytest.fixture
+def test_job_id():
+    """Generate a unique job ID for testing."""
+    return str(uuid.uuid4())

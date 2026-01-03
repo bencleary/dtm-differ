@@ -1,11 +1,16 @@
+import sys
 from argparse import ArgumentParser, BooleanOptionalAction
 from pathlib import Path
-import sys
+from uuid import uuid4
 
 import xdem
 
+from dtm_differ.db import Database
 from dtm_differ.pipeline import run_pipeline
 from dtm_differ.pipeline.types import ProcessingConfig
+from dtm_differ.storage import check_if_job_directory_exists, create_directory
+
+DATABASE_PATH = "logs.sqlite"
 
 
 def build_parser() -> ArgumentParser:
@@ -26,7 +31,7 @@ def build_parser() -> ArgumentParser:
         "--thresholds",
         help="Thresholds in meters: green,amber,red (or amber,red). "
         "⚠️  WARNING: Assumes input DEMs use meter-based vertical units. "
-        "Verify your DEM vertical units match this assumption."
+        "Verify your DEM vertical units match this assumption.",
     )
     run.add_argument(
         "--style", choices=["diverging", "terrain", "greyscale"], default="diverging"
@@ -108,6 +113,9 @@ def main() -> int:
             "Invalid --thresholds; expected 'amber,red' or 'green,amber,red'"
         )
 
+    db = Database(DATABASE_PATH)
+    db.initialise()
+
     match args.command:
         case "run":
             a_path = Path(args.a)
@@ -149,10 +157,25 @@ def main() -> int:
                     "   Consider using --uncertainty constant with appropriate sigma values for defensible results."
                 )
 
+            # Job management -> create job id, create directory, pass job id to pipeline, log job and status
+            job_id = str(uuid4())
+
+            if not check_if_job_directory_exists(out_dir, job_id):
+                create_directory(out_dir, job_id)
+            else:
+                print(
+                    f"Job directory already exists: {out_dir}/{job_id}, use the status command to check the status"
+                )
+                sys.exit(1)
+
+            db.create_job(job_id)
+
             result = run_pipeline(
+                db=db,
+                job_id=job_id,
                 a_path=a_path,
                 b_path=b_path,
-                out_dir=out_dir,
+                out_dir=(out_dir / job_id),
                 config=ProcessingConfig(
                     resample=args.resample,
                     align=args.align,
@@ -170,6 +193,7 @@ def main() -> int:
                 defer_output=args.defer_output,
             )
 
+            print(f"Job ID: {job_id}")
             print(f"Wrote map layers to {result.map_layers_dir}")
             print(f"Wrote reports to {result.reports_dir}")
             print(f"Rank thresholds: {t_green},{t_amber},{t_red} m")
@@ -178,6 +202,14 @@ def main() -> int:
                 print("\n" + result.deferred_output, file=sys.stderr)
             return 0
         case "status":
+            job_id = args.job_id
+            db = Database(DATABASE_PATH)
+            status = db.get_job_status(job_id)
+            if status is None:
+                print(f"Job not found: {job_id}")
+                return 1
+            print(f"Job ID: {job_id}")
+            print(f"Status: {status}")
             return 0
         case _:
             print("Invalid command")
