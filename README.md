@@ -1,10 +1,12 @@
 # DTM Differ
 
-A command-line tool for detecting elevation changes between Digital Terrain Models (DTMs). Built for geotechnical monitoring workflows—subsidence tracking, erosion detection, cut/fill analysis.
+DTM Differ is a command-line utility for quantifying elevation change between Digital Terrain Models. It is designed for geotechnical and environmental monitoring workflows, including subsidence assessment, erosion analysis, and cut and fill evaluation.
+
+The tool focuses on producing interpretable, defensible outputs rather than exploratory GIS analysis.
 
 ## Installation
 
-Requires Python 3.13+. Install with [uv](https://github.com/astral-sh/uv) (recommended) or pip:
+Python 3.13 or later is required. Installation via `uv` is recommended, though `pip` is also supported.
 
 ```bash
 git clone <repository-url>
@@ -15,55 +17,59 @@ uv pip install -e .
 ## Quick Start
 
 ```bash
-# Basic usage
+# Basic comparison
 dtm-differ run --a before.tif --b after.tif --out output/
 
-# Custom movement thresholds (meters)
+# Define custom movement thresholds (metres)
 dtm-differ run --a before.tif --b after.tif --out output/ --thresholds "0.5,2.0,5.0"
 
-# Coastal monitoring: mask out sea/water areas
+# Coastal use case: exclude low-lying or marine areas
 dtm-differ run --a before.tif --b after.tif --out output/ --min-elevation 2.0
 
-# Focus on specific elevation range (e.g., cliff zone 2-80m)
+# Constrain analysis to a specific elevation band
 dtm-differ run --a before.tif --b after.tif --out output/ --min-elevation 2.0 --max-elevation 80.0
 ```
 
-## CLI Options
+## Command-Line Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--a`, `--b` | required | Input DTM paths (GeoTIFF) |
-| `--out` | required | Output directory |
-| `--thresholds` | `1.0,3.0,6.0` | Green/amber/red thresholds in meters |
-| `--resample` | `bilinear` | Resampling method (`nearest`, `bilinear`) |
-| `--align` | `to-a` | Reference grid (`to-a`, `to-b`) |
-| `--min-elevation` | `None` | Exclude areas below this elevation (meters) |
-| `--max-elevation` | `None` | Exclude areas above this elevation (meters) |
-| `--uncertainty` | `constant` | Uncertainty mode (`constant`, `none`) |
-| `--sigma-a`, `--sigma-b` | `0.5` | DEM vertical uncertainty (1σ, meters) |
-| `--sigma-coreg` | `0.3` | Co-registration uncertainty (1σ, meters) |
-| `--k-sigma` | `1.96` | Significance threshold (~95% confidence) |
+| Option                   | Default       | Description                                                   |
+| ------------------------ | ------------- | ------------------------------------------------------------- |
+| `--a`, `--b`             | required      | Input DTM GeoTIFFs                                            |
+| `--out`                  | required      | Output directory                                              |
+| `--thresholds`           | `1.0,3.0,6.0` | Green, amber, red thresholds in metres                        |
+| `--resample`             | `bilinear`    | Resampling method                                             |
+| `--align`                | `to-a`        | Reference grid alignment                                      |
+| `--min-elevation`        | `None`        | Mask areas below this elevation                               |
+| `--max-elevation`        | `None`        | Mask areas above this elevation                               |
+| `--uncertainty`          | `constant`    | Uncertainty handling mode                                     |
+| `--sigma-a`, `--sigma-b` | `0.5`         | Vertical uncertainty per DEM (1σ, metres)                     |
+| `--sigma-coreg`          | `0.3`         | Co-registration uncertainty (1σ, metres)                      |
+| `--k-sigma`              | `1.96`        | Significance multiplier (approximately 95 percent confidence) |
 
 ## Outputs
 
 ```
 output/
 ├── map_layers/
-│   ├── diff.tif                 # Raw difference (A - B)
-│   ├── elevation_change.tif     # Difference with nodata handling
-│   ├── change_magnitude.tif     # Absolute change
-│   ├── change_direction.tif     # -1 (subsidence), 0, +1 (uplift)
-│   ├── slope_degrees.tif        # Slope from DEM A
-│   ├── movement_rank.tif        # 0=below threshold, 1=green, 2=amber, 3=red
-│   ├── sigma_dh.tif             # Combined uncertainty (if enabled)
-│   ├── z_score.tif              # Significance score (if enabled)
-│   └── within_noise_mask.tif    # Areas below detection threshold
+│   ├── diff.tif
+│   ├── elevation_change.tif
+│   ├── change_magnitude.tif
+│   ├── change_direction.tif
+│   ├── slope_degrees.tif
+│   ├── movement_rank.tif
+│   ├── sigma_dh.tif
+│   ├── z_score.tif
+│   └── within_noise_mask.tif
 └── reports/
-    ├── report.html              # Visual summary
-    └── metrics.json             # Machine-readable QA metrics
+    ├── report.html
+    └── metrics.json
 ```
 
+The outputs are structured for both visual inspection and downstream automation. Raster layers are GIS-ready, while summary metrics support quality assurance and reporting.
+
 ## Python API
+
+DTM Differ can also be used programmatically for batch processing or integration into larger pipelines.
 
 ```python
 from pathlib import Path
@@ -74,6 +80,7 @@ from dtm_differ.pipeline.types import ProcessingConfig
 
 db = Database("jobs.sqlite")
 db.initialise()
+
 job_id = str(uuid4())
 db.create_job(job_id)
 
@@ -83,44 +90,50 @@ result = run_pipeline(
     a_path=Path("before.tif"),
     b_path=Path("after.tif"),
     out_dir=Path("output/"),
-    config=ProcessingConfig(t_green=1.0, t_amber=3.0, t_red=6.0),
+    config=ProcessingConfig(
+        t_green=1.0,
+        t_amber=3.0,
+        t_red=6.0,
+    ),
 )
 ```
 
 ## Movement Classification
 
-Changes are classified by absolute magnitude:
+Elevation change is categorised by absolute magnitude.
 
-| Rank | Label | Default Range |
-|------|-------|---------------|
-| 0 | Below threshold | < 1.0 m |
-| 1 | Green | 1.0 – 3.0 m |
-| 2 | Amber | 3.0 – 6.0 m |
-| 3 | Red | ≥ 6.0 m |
+| Rank | Classification  | Default Range |
+| ---- | --------------- | ------------- |
+| 0    | Below threshold | < 1.0 m       |
+| 1    | Green           | 1.0 to 3.0 m  |
+| 2    | Amber           | 3.0 to 6.0 m  |
+| 3    | Red             | ≥ 6.0 m       |
 
-Thresholds are inclusive on the lower bound: a 3.0m change is amber, not green.
+Thresholds are inclusive at the lower bound. A change of exactly 3.0 metres is classified as amber.
 
-## Input Requirements
+## Input Assumptions
 
-- **Format**: GeoTIFF with valid CRS
-- **Units**: Thresholds assume meters—verify your vertical units match
-- **Memory**: ~8× input file size at peak (loaded into memory)
+* Inputs must be single-band GeoTIFFs with a valid CRS
+* Thresholds assume vertical units are metres
+* Peak memory usage is approximately eight times the input raster size
 
-The tool auto-reprojects mismatched CRS and resamples different grid alignments.
+Mismatched projections and grid alignments are handled automatically through reprojection and resampling.
 
-## Development
+## Development and Testing
 
 ```bash
 uv pip install -e ".[test]"
 pytest src/tests/
 ```
 
-## Why I Built This
+## Rationale
 
-I needed a repeatable way to compare survey DEMs for a mining monitoring project. Existing tools either required a full GIS setup or didn't handle uncertainty propagation. This fills the gap: a focused CLI that produces defensible outputs with confidence intervals.
+This tool exists to bridge the gap between heavyweight GIS workflows and overly simplistic differencing scripts. Many existing solutions either require full desktop GIS environments or fail to account for uncertainty and detection limits.
 
-See [docs/methodology.md](docs/methodology.md) for technical details on the difference calculation, slope algorithm, and uncertainty propagation.
+DTM Differ provides a narrow, well-defined pipeline that produces traceable results suitable for engineering and decision-support contexts.
 
-## Acknowledgments
+Further details on the underlying methodology, including differencing logic, slope calculation, and uncertainty propagation, are available in `docs/methodology.md`.
 
-Built on [xdem](https://github.com/GlacioHack/xdem), [rasterio](https://rasterio.readthedocs.io/), and [NumPy](https://numpy.org/).
+## Acknowledgements
+
+DTM Differ builds on the excellent work of the open-source geospatial community, particularly xdem, rasterio, and NumPy.
