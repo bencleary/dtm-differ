@@ -96,6 +96,7 @@ def _compute_dh_metrics(
 def _save_metrics_json(out_path: Path, payload: dict) -> None:
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
+
 def _build_metrics_payload(
     r: DerivedRasters,
     config: ProcessingConfig,
@@ -311,7 +312,7 @@ def align_dems(
     config: ProcessingConfig,
 ) -> AlignedDems:
     from .types import ReprojectionInfo
-    
+
     compat = check_raster_compatability(a_info, b_info)
     reprojection_info = ReprojectionInfo(
         occurred=False,
@@ -322,11 +323,11 @@ def align_dems(
         reference_grid=None,
         reason=None,
     )
-    
+
     if not compat.same_crs or not compat.same_grid or not compat.overlaps:
         if config.align == "to-a":
             target_crs = a_info.crs
-            print(f"Reprojecting DEM B to match DEM A:")
+            print("Reprojecting DEM B to match DEM A:")
             print(f"  Source CRS (B): {b_info.crs}")
             print(f"  Target CRS (A): {a_info.crs}")
             print(f"  Resampling method: {config.resample}")
@@ -342,7 +343,7 @@ def align_dems(
             )
         elif config.align == "to-b":
             target_crs = b_info.crs
-            print(f"Reprojecting DEM A to match DEM B:")
+            print("Reprojecting DEM A to match DEM B:")
             print(f"  Source CRS (A): {a_info.crs}")
             print(f"  Target CRS (B): {b_info.crs}")
             print(f"  Resampling method: {config.resample}")
@@ -360,7 +361,7 @@ def align_dems(
             raise ValueError(f"Invalid alignment: {config.align}")
     else:
         print("DEMs are compatible - no reprojection needed.")
-    
+
     return AlignedDems(a_dem=a_dem, b_dem=b_dem, reprojection_info=reprojection_info)
 
 
@@ -573,11 +574,15 @@ def generate_report(
     metrics_payload = _build_metrics_payload(r, config, a_info=a_info, b_info=b_info)
     dh_metrics = metrics_payload["dh_metrics"]
     coreg_metrics = metrics_payload["coregistration_check"]
-    
+
     # Input file information
     if a_info and b_info:
-        processing_items.append(f"<li><strong>Input DEM A:</strong> {a_info.path.name} (CRS: {a_info.crs})</li>")
-        processing_items.append(f"<li><strong>Input DEM B:</strong> {b_info.path.name} (CRS: {b_info.crs})</li>")
+        processing_items.append(
+            f"<li><strong>Input DEM A:</strong> {a_info.path.name} (CRS: {a_info.crs})</li>"
+        )
+        processing_items.append(
+            f"<li><strong>Input DEM B:</strong> {b_info.path.name} (CRS: {b_info.crs})</li>"
+        )
         if getattr(a_info, "linear_unit_name", None):
             processing_items.append(
                 f"<li><strong>DEM A linear units:</strong> {a_info.linear_unit_name}</li>"
@@ -586,47 +591,81 @@ def generate_report(
             processing_items.append(
                 f"<li><strong>DEM B linear units:</strong> {b_info.linear_unit_name}</li>"
             )
-    
+
     # Output CRS
     if r.diff.crs:
-        output_crs = str(r.diff.crs) if hasattr(r.diff.crs, '__str__') else repr(r.diff.crs)
+        output_crs = (
+            str(r.diff.crs) if hasattr(r.diff.crs, "__str__") else repr(r.diff.crs)
+        )
         processing_items.append(f"<li><strong>Output CRS:</strong> {output_crs}</li>")
-    
+
     # Reprojection information
     if r.reprojection_info.occurred:
         processing_items.append("<li><strong>Reprojection:</strong> Yes</li>")
         if r.reprojection_info.source_crs_a:
-            processing_items.append(f"<li><strong>Source CRS (A):</strong> {r.reprojection_info.source_crs_a}</li>")
+            processing_items.append(
+                f"<li><strong>Source CRS (A):</strong> {r.reprojection_info.source_crs_a}</li>"
+            )
         if r.reprojection_info.source_crs_b:
-            processing_items.append(f"<li><strong>Source CRS (B):</strong> {r.reprojection_info.source_crs_b}</li>")
+            processing_items.append(
+                f"<li><strong>Source CRS (B):</strong> {r.reprojection_info.source_crs_b}</li>"
+            )
         if r.reprojection_info.target_crs:
-            processing_items.append(f"<li><strong>Target CRS:</strong> {r.reprojection_info.target_crs}</li>")
+            processing_items.append(
+                f"<li><strong>Target CRS:</strong> {r.reprojection_info.target_crs}</li>"
+            )
         if r.reprojection_info.resampling_method:
-            processing_items.append(f"<li><strong>Resampling method:</strong> {r.reprojection_info.resampling_method}</li>")
+            processing_items.append(
+                f"<li><strong>Resampling method:</strong> {r.reprojection_info.resampling_method}</li>"
+            )
         if r.reprojection_info.reference_grid:
-            processing_items.append(f"<li><strong>Reference grid:</strong> {r.reprojection_info.reference_grid}</li>")
+            processing_items.append(
+                f"<li><strong>Reference grid:</strong> {r.reprojection_info.reference_grid}</li>"
+            )
         if r.reprojection_info.reason:
-            processing_items.append(f"<li><strong>Reason:</strong> {r.reprojection_info.reason}</li>")
+            processing_items.append(
+                f"<li><strong>Reason:</strong> {r.reprojection_info.reason}</li>"
+            )
     else:
-        processing_items.append("<li><strong>Reprojection:</strong> No (DEMs were compatible)</li>")
-    
+        processing_items.append(
+            "<li><strong>Reprojection:</strong> No (DEMs were compatible)</li>"
+        )
+
     # Processing configuration
-    processing_items.append(f"<li><strong>Resampling method:</strong> {config.resample}</li>")
-    processing_items.append(f"<li><strong>Alignment reference:</strong> {config.align}</li>")
-    processing_items.append(f"<li><strong>Movement thresholds:</strong> Green={config.t_green:.1f}m, Amber={config.t_amber:.1f}m, Red={config.t_red:.1f}m</li>")
-    
+    processing_items.append(
+        f"<li><strong>Resampling method:</strong> {config.resample}</li>"
+    )
+    processing_items.append(
+        f"<li><strong>Alignment reference:</strong> {config.align}</li>"
+    )
+    processing_items.append(
+        f"<li><strong>Movement thresholds:</strong> Green={config.t_green:.1f}m, Amber={config.t_amber:.1f}m, Red={config.t_red:.1f}m</li>"
+    )
+
     # Uncertainty configuration
     if config.uncertainty_mode == "constant":
         processing_items.append(f"<li><strong>Uncertainty mode:</strong> Constant</li>")
-        processing_items.append(f"<li><strong>σ<sub>A</sub>:</strong> {config.sigma_a:.3f} m</li>")
-        processing_items.append(f"<li><strong>σ<sub>B</sub>:</strong> {config.sigma_b:.3f} m</li>")
-        processing_items.append(f"<li><strong>σ<sub>coreg</sub>:</strong> {config.sigma_coreg:.3f} m</li>")
-        processing_items.append(f"<li><strong>k (significance threshold):</strong> {config.k_sigma:g}</li>")
-        processing_items.append(f"<li><strong>Suppress within-noise ranks:</strong> {'Yes' if config.suppress_within_noise_rank else 'No'}</li>")
+        processing_items.append(
+            f"<li><strong>σ<sub>A</sub>:</strong> {config.sigma_a:.3f} m</li>"
+        )
+        processing_items.append(
+            f"<li><strong>σ<sub>B</sub>:</strong> {config.sigma_b:.3f} m</li>"
+        )
+        processing_items.append(
+            f"<li><strong>σ<sub>coreg</sub>:</strong> {config.sigma_coreg:.3f} m</li>"
+        )
+        processing_items.append(
+            f"<li><strong>k (significance threshold):</strong> {config.k_sigma:g}</li>"
+        )
+        processing_items.append(
+            f"<li><strong>Suppress within-noise ranks:</strong> {'Yes' if config.suppress_within_noise_rank else 'No'}</li>"
+        )
     else:
         processing_items.append("<li><strong>Uncertainty mode:</strong> None ⚠️</li>")
-        processing_items.append("<li><em>Uncertainty analysis not performed. Results may include noise-level changes.</em></li>")
-    
+        processing_items.append(
+            "<li><em>Uncertainty analysis not performed. Results may include noise-level changes.</em></li>"
+        )
+
     # Add statistical summary
     valid_mask = ~r.output_mask
     valid_pct = float(dh_metrics["valid_fraction"]) * 100.0
@@ -652,7 +691,9 @@ def generate_report(
         )
 
     if "mean_m" in dh_metrics:
-        processing_items.append("<li><strong>Elevation change statistics (dh):</strong></li>")
+        processing_items.append(
+            "<li><strong>Elevation change statistics (dh):</strong></li>"
+        )
         processing_items.append(
             f"<li style='margin-left: 20px;'>Mean (bias): {dh_metrics['mean_m']:+.3f} m</li>"
         )
@@ -677,7 +718,7 @@ def generate_report(
             f"75th={dh_metrics['p75_m']:+.3f}, 95th={dh_metrics['p95_m']:+.3f}, 99th={dh_metrics['p99_m']:+.3f} m"
             "</li>"
         )
-    
+
     # Movement rank distribution
     valid_rank = r.movement_rank[valid_mask]
     rank_0 = int(np.sum(valid_rank == 0))
@@ -688,18 +729,18 @@ def generate_report(
         processing_items.append("<li><strong>Movement rank distribution:</strong></li>")
         valid_n = int(dh_metrics["n_valid"])
         processing_items.append(
-            f"<li style='margin-left: 20px;'>Unclassified (0): {rank_0:,} ({rank_0/valid_n*100:.1f}%)</li>"
+            f"<li style='margin-left: 20px;'>Unclassified (0): {rank_0:,} ({rank_0 / valid_n * 100:.1f}%)</li>"
         )
         processing_items.append(
-            f"<li style='margin-left: 20px;'>Green (1): {rank_1:,} ({rank_1/valid_n*100:.1f}%)</li>"
+            f"<li style='margin-left: 20px;'>Green (1): {rank_1:,} ({rank_1 / valid_n * 100:.1f}%)</li>"
         )
         processing_items.append(
-            f"<li style='margin-left: 20px;'>Amber (2): {rank_2:,} ({rank_2/valid_n*100:.1f}%)</li>"
+            f"<li style='margin-left: 20px;'>Amber (2): {rank_2:,} ({rank_2 / valid_n * 100:.1f}%)</li>"
         )
         processing_items.append(
-            f"<li style='margin-left: 20px;'>Red (3): {rank_3:,} ({rank_3/valid_n*100:.1f}%)</li>"
+            f"<li style='margin-left: 20px;'>Red (3): {rank_3:,} ({rank_3 / valid_n * 100:.1f}%)</li>"
         )
-    
+
     if processing_items:
         processing_html = f"<ul>{''.join(processing_items)}</ul>"
 

@@ -59,10 +59,19 @@ output/
 
 ```python
 from pathlib import Path
+from uuid import uuid4
+from dtm_differ.db import Database
 from dtm_differ.pipeline import run_pipeline
 from dtm_differ.pipeline.types import ProcessingConfig
 
+db = Database("jobs.sqlite")
+db.initialise()
+job_id = str(uuid4())
+db.create_job(job_id)
+
 result = run_pipeline(
+    db=db,
+    job_id=job_id,
     a_path=Path("before.tif"),
     b_path=Path("after.tif"),
     out_dir=Path("output/"),
@@ -103,10 +112,6 @@ pytest src/tests/
 I needed a repeatable way to compare survey DEMs for a mining monitoring project. Existing tools either required a full GIS setup or didn't handle uncertainty propagation. This fills the gap: a focused CLI that produces defensible outputs with confidence intervals.
 
 See [docs/methodology.md](docs/methodology.md) for technical details on the difference calculation, slope algorithm, and uncertainty propagation.
-
-## License
-
-MIT
 
 ## Acknowledgments
 
