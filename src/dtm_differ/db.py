@@ -29,15 +29,6 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        # Ensure table exists (for in-memory databases)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
         cursor.execute(
             """
             INSERT INTO jobs (id, status) VALUES (?, ?)
@@ -51,15 +42,6 @@ class Database:
     def get_job_status(self, job_id: str) -> str | None:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-
-        # Ensure table exists (for in-memory databases)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
 
         cursor.execute(
             """
@@ -78,23 +60,6 @@ class Database:
     ):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-
-        # Ensure table exists (for in-memory databases)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # If job doesn't exist, create it (for tests that update before creating)
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO jobs (id, status) VALUES (?, ?)
-            """,
-            (job_id, "pending"),
-        )
 
         cursor.execute(
             """

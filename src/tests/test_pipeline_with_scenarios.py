@@ -19,7 +19,7 @@ from dtm_differ.pipeline import run_pipeline
 from dtm_differ.pipeline.types import ProcessingConfig
 
 
-def test_scenario1_basic_movement(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_scenario1_basic_movement(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test Scenario 1: Basic movement patterns with no nodata."""
     a_path = test_dtm_dir / "scenario1_dem_a.tif"
     b_path = test_dtm_dir / "scenario1_dem_b.tif"
@@ -32,8 +32,8 @@ def test_scenario1_basic_movement(temp_output_dir, test_dtm_dir, test_db, test_j
         generate_polygons=False,
     )
 
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Verify outputs exist
     assert result.map_layers_dir.exists()
@@ -60,7 +60,7 @@ def test_scenario1_basic_movement(temp_output_dir, test_dtm_dir, test_db, test_j
     assert not np.any(result.output_mask)
 
 
-def test_scenario2_nodata_edges(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_scenario2_nodata_edges(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test Scenario 2: Nodata at edges and boundaries."""
     a_path = test_dtm_dir / "scenario2_dem_a.tif"
     b_path = test_dtm_dir / "scenario2_dem_b.tif"
@@ -70,8 +70,8 @@ def test_scenario2_nodata_edges(temp_output_dir, test_dtm_dir, test_db, test_job
         generate_polygons=False,
     )
 
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Verify outputs exist
     assert (result.map_layers_dir / "elevation_change.tif").exists()
@@ -88,7 +88,7 @@ def test_scenario2_nodata_edges(temp_output_dir, test_dtm_dir, test_db, test_job
     assert np.all(np.isfinite(result.elevation_change[valid_mask]))
 
 
-def test_scenario3_mixed_nodata_values(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_scenario3_mixed_nodata_values(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test Scenario 3: Different nodata values in DEM A and B."""
     a_path = test_dtm_dir / "scenario3_dem_a.tif"
     b_path = test_dtm_dir / "scenario3_dem_b.tif"
@@ -98,8 +98,8 @@ def test_scenario3_mixed_nodata_values(temp_output_dir, test_dtm_dir, test_db, t
         generate_polygons=False,
     )
 
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Verify pipeline handles different nodata values
     assert (result.map_layers_dir / "elevation_change.tif").exists()
@@ -108,7 +108,7 @@ def test_scenario3_mixed_nodata_values(temp_output_dir, test_dtm_dir, test_db, t
     assert np.any(result.output_mask)
 
 
-def test_scenario4_slope_variations(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_scenario4_slope_variations(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test Scenario 4: Various slope conditions."""
     a_path = test_dtm_dir / "scenario4_dem_a.tif"
     b_path = test_dtm_dir / "scenario4_dem_b.tif"
@@ -118,8 +118,8 @@ def test_scenario4_slope_variations(temp_output_dir, test_dtm_dir, test_db, test
         generate_polygons=False,
     )
 
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Verify slope calculation
     assert (result.map_layers_dir / "slope_degrees.tif").exists()
@@ -137,7 +137,7 @@ def test_scenario4_slope_variations(temp_output_dir, test_dtm_dir, test_db, test
     assert np.std(valid_slope) > 0.1
 
 
-def test_scenario5_threshold_boundaries(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_scenario5_threshold_boundaries(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test Scenario 5: Movement values exactly at thresholds."""
     a_path = test_dtm_dir / "scenario5_dem_a.tif"
     b_path = test_dtm_dir / "scenario5_dem_b.tif"
@@ -150,8 +150,8 @@ def test_scenario5_threshold_boundaries(temp_output_dir, test_dtm_dir, test_db, 
         generate_polygons=False,
     )
 
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Load movement rank
     rank_dem = xdem.DEM(result.map_layers_dir / "movement_rank.tif")
@@ -174,7 +174,7 @@ def test_scenario5_threshold_boundaries(temp_output_dir, test_dtm_dir, test_db, 
     assert np.any(rank_data == 3)  # Red (6.0m threshold)
 
 
-def test_scenario6_sparse_nodata(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_scenario6_sparse_nodata(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test Scenario 6: Sparse nodata (should pass validation)."""
     a_path = test_dtm_dir / "scenario6_dem_a.tif"
     b_path = test_dtm_dir / "scenario6_dem_b.tif"
@@ -185,8 +185,8 @@ def test_scenario6_sparse_nodata(temp_output_dir, test_dtm_dir, test_db, test_jo
     )
 
     # Should pass validation (has >1% valid data)
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Verify processing completed
     assert (result.map_layers_dir / "elevation_change.tif").exists()
@@ -196,7 +196,7 @@ def test_scenario6_sparse_nodata(temp_output_dir, test_dtm_dir, test_db, test_jo
     assert valid_fraction > 0.5  # More than 50% valid
 
 
-def test_scenario7_mostly_nodata_validation_fails(test_dtm_dir, test_db, test_job_id):
+def test_scenario7_mostly_nodata_validation_fails(test_dtm_dir, db, test_job_id):
     """Test Scenario 7: Mostly nodata (should fail validation)."""
     a_path = test_dtm_dir / "scenario7_dem_a.tif"
     b_path = test_dtm_dir / "scenario7_dem_b.tif"
@@ -207,13 +207,13 @@ def test_scenario7_mostly_nodata_validation_fails(test_dtm_dir, test_db, test_jo
     )
 
     # Should raise ValueError due to insufficient valid data
-    test_db.create_job(test_job_id)
+    db.create_job(test_job_id)
     with pytest.raises(ValueError, match="insufficient valid data"):
         with tempfile.TemporaryDirectory() as tmpdir:
-            run_pipeline(test_db, test_job_id, a_path, b_path, Path(tmpdir), config)
+            run_pipeline(db, test_job_id, a_path, b_path, Path(tmpdir), config)
 
 
-def test_scenario8_no_nodata_attribute(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_scenario8_no_nodata_attribute(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test Scenario 8: DEMs without nodata attribute but with NaN/inf."""
     a_path = test_dtm_dir / "scenario8_dem_a.tif"
     b_path = test_dtm_dir / "scenario8_dem_b.tif"
@@ -224,8 +224,8 @@ def test_scenario8_no_nodata_attribute(temp_output_dir, test_dtm_dir, test_db, t
     )
 
     # Should handle NaN/inf values
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Verify outputs exist
     assert (result.map_layers_dir / "elevation_change.tif").exists()
@@ -237,7 +237,7 @@ def test_scenario8_no_nodata_attribute(temp_output_dir, test_dtm_dir, test_db, t
         assert np.all(np.isfinite(result.elevation_change[valid_mask]))
 
 
-def test_all_scenarios_generate_outputs(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_all_scenarios_generate_outputs(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test that all scenarios generate expected output files."""
     scenarios = [1, 2, 3, 4, 5, 6, 8]  # Skip 7 (fails validation)
 
@@ -256,8 +256,8 @@ def test_all_scenarios_generate_outputs(temp_output_dir, test_dtm_dir, test_db, 
 
         # Create a new job for each scenario
         job_id = f"{test_job_id}_{scenario_num}"
-        test_db.create_job(job_id)
-        result = run_pipeline(test_db, job_id, a_path, b_path, scenario_out, config)
+        db.create_job(job_id)
+        result = run_pipeline(db, job_id, a_path, b_path, scenario_out, config)
 
         # Verify all expected outputs exist
         expected_files = [
@@ -279,7 +279,7 @@ def test_all_scenarios_generate_outputs(temp_output_dir, test_dtm_dir, test_db, 
             )
 
 
-def test_nodata_propagation_consistency(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_nodata_propagation_consistency(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test that nodata is consistently handled across all output rasters."""
     a_path = test_dtm_dir / "scenario2_dem_a.tif"  # Has nodata
     b_path = test_dtm_dir / "scenario2_dem_b.tif"
@@ -289,8 +289,8 @@ def test_nodata_propagation_consistency(temp_output_dir, test_dtm_dir, test_db, 
         generate_polygons=False,
     )
 
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Load all output rasters
     elevation_change = xdem.DEM(result.map_layers_dir / "elevation_change.tif")
@@ -338,7 +338,9 @@ def test_nodata_propagation_consistency(temp_output_dir, test_dtm_dir, test_db, 
     )  # Slope nodata includes original nodata
 
 
-def test_movement_rank_classification_ranges(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_movement_rank_classification_ranges(
+    temp_output_dir, test_dtm_dir, db, test_job_id
+):
     """Test that movement ranking uses correct threshold ranges."""
     a_path = test_dtm_dir / "scenario5_dem_a.tif"  # Has threshold boundary values
     b_path = test_dtm_dir / "scenario5_dem_b.tif"
@@ -351,8 +353,8 @@ def test_movement_rank_classification_ranges(temp_output_dir, test_dtm_dir, test
         generate_polygons=False,
     )
 
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     # Load magnitude and rank
     magnitude_dem = xdem.DEM(result.map_layers_dir / "change_magnitude.tif")
@@ -387,7 +389,9 @@ def test_movement_rank_classification_ranges(temp_output_dir, test_dtm_dir, test
         assert np.all(magnitude[rank_3_mask] >= 6.0)
 
 
-def test_uncertainty_constant_outputs_exist(temp_output_dir, test_dtm_dir, test_db, test_job_id):
+def test_uncertainty_constant_outputs_exist(
+    temp_output_dir, test_dtm_dir, db, test_job_id
+):
     a_path = test_dtm_dir / "scenario1_dem_a.tif"
     b_path = test_dtm_dir / "scenario1_dem_b.tif"
 
@@ -401,8 +405,8 @@ def test_uncertainty_constant_outputs_exist(temp_output_dir, test_dtm_dir, test_
         generate_polygons=False,
     )
 
-    test_db.create_job(test_job_id)
-    result = run_pipeline(test_db, test_job_id, a_path, b_path, temp_output_dir, config)
+    db.create_job(test_job_id)
+    result = run_pipeline(db, test_job_id, a_path, b_path, temp_output_dir, config)
 
     assert (result.map_layers_dir / "sigma_dh.tif").exists()
     assert (result.map_layers_dir / "z_score.tif").exists()
