@@ -204,6 +204,7 @@ def main() -> int:
         case "status":
             job_id = args.job_id
             db = Database(DATABASE_PATH)
+            db.initialise()
             status = db.get_job_status(job_id)
             if status is None:
                 print(f"Job not found: {job_id}")

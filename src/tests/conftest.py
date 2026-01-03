@@ -74,14 +74,11 @@ def create_test_dem():
 @pytest.fixture
 def db():
     """Create a database with a temp file that persists across calls."""
-    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
-        db_path = f.name
-
-    database = Database(db_path)
+    database = Database(":memory:")
     database.initialise()
     yield database
 
-    Path(db_path).unlink(missing_ok=True)
+    # Path(db_path).unlink(missing_ok=True)
 
 
 # Alias for backwards compatibility with existing tests
