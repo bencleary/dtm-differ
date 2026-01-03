@@ -1,0 +1,31 @@
+<div class="card">
+    <h3>Confidence Summary</h3>
+    <div class="stat-row">
+        <span class="stat-label">σ<sub>dh</sub> (median)</span>
+        <span class="stat-value"
+            >{{ "%.3f"|format(confidence.sigma_dh_median) }} m</span
+        >
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Detection threshold (k)</span>
+        <span class="stat-value">{{ confidence.k_sigma }}</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Within noise</span>
+        <span class="stat-value"
+            >{{ "%.1f"|format(confidence.within_noise_pct) }}%</span
+        >
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Detectable (|z| ≥ k)</span>
+        <span class="stat-value"
+            >{{ "%.1f"|format(confidence.detectable_pct) }}%</span
+        >
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">High confidence (|z| ≥ 3)</span>
+        <span class="stat-value"
+            >{{ "%.1f"|format(confidence.high_confidence_pct) }}%</span
+        >
+    </div>
+</div>

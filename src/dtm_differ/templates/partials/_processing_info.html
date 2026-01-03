@@ -1,0 +1,69 @@
+<div class="card">
+    <h3>Processing Information</h3>
+    <div class="stat-row">
+        <span class="stat-label">Input A</span>
+        <span class="stat-value">{{ processing.input_a }}</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Input B</span>
+        <span class="stat-value">{{ processing.input_b }}</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">CRS (A)</span>
+        <span class="stat-value">{{ processing.crs_a }}</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">CRS (B)</span>
+        <span class="stat-value">{{ processing.crs_b }}</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Output CRS</span>
+        <span class="stat-value">{{ processing.output_crs }}</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Reprojected</span>
+        <span class="stat-value"
+            >{{ "Yes" if processing.reprojected else "No" }}</span
+        >
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Resample</span>
+        <span class="stat-value">{{ processing.resample_method }}</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Thresholds (G/A/R)</span>
+        <span class="stat-value"
+            >{{ processing.thresholds[0] }} / {{ processing.thresholds[1] }} /
+            {{ processing.thresholds[2] }} m</span
+        >
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Uncertainty mode</span>
+        <span class="stat-value">{{ processing.uncertainty_mode }}</span>
+    </div>
+    {% if processing.sigma_a is not none %}
+    <div class="stat-row">
+        <span class="stat-label">σ (A / B / coreg)</span>
+        <span class="stat-value"
+            >{{ "%.2f"|format(processing.sigma_a) }} / {{
+            "%.2f"|format(processing.sigma_b) }} / {{
+            "%.2f"|format(processing.sigma_coreg) }} m</span
+        >
+    </div>
+    {% endif %} {% if processing.min_elevation is not none or
+    processing.max_elevation is not none %}
+    <div class="stat-row">
+        <span class="stat-label">Elevation mask</span>
+        <span class="stat-value">
+            {% if processing.min_elevation is not none and
+            processing.max_elevation is not none %} {{
+            "%.1f"|format(processing.min_elevation) }} – {{
+            "%.1f"|format(processing.max_elevation) }} m {% elif
+            processing.min_elevation is not none %} ≥ {{
+            "%.1f"|format(processing.min_elevation) }} m {% elif
+            processing.max_elevation is not none %} ≤ {{
+            "%.1f"|format(processing.max_elevation) }} m {% endif %}
+        </span>
+    </div>
+    {% endif %}
+</div>

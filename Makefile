@@ -1,7 +1,11 @@
-.PHONY: run test install test-scenarios
+.PHONY: run test install test-scenarios serve
 
 # Keep tool caches/temp inside the repo so commands work in sandboxed environments.
 UV_ENV = UV_CACHE_DIR=$(CURDIR)/.uv-cache TMPDIR=$(CURDIR)/.tmp XDG_CACHE_HOME=$(CURDIR)/.cache MPLCONFIGDIR=$(CURDIR)/.mplconfig
+
+# Server report directory
+serve:
+	python -m http.server 8000 --directory output
 
 # Install the package in editable mode
 install:

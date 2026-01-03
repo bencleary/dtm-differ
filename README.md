@@ -20,6 +20,12 @@ dtm-differ run --a before.tif --b after.tif --out output/
 
 # Custom movement thresholds (meters)
 dtm-differ run --a before.tif --b after.tif --out output/ --thresholds "0.5,2.0,5.0"
+
+# Coastal monitoring: mask out sea/water areas
+dtm-differ run --a before.tif --b after.tif --out output/ --min-elevation 2.0
+
+# Focus on specific elevation range (e.g., cliff zone 2-80m)
+dtm-differ run --a before.tif --b after.tif --out output/ --min-elevation 2.0 --max-elevation 80.0
 ```
 
 ## CLI Options
@@ -31,6 +37,8 @@ dtm-differ run --a before.tif --b after.tif --out output/ --thresholds "0.5,2.0,
 | `--thresholds` | `1.0,3.0,6.0` | Green/amber/red thresholds in meters |
 | `--resample` | `bilinear` | Resampling method (`nearest`, `bilinear`) |
 | `--align` | `to-a` | Reference grid (`to-a`, `to-b`) |
+| `--min-elevation` | `None` | Exclude areas below this elevation (meters) |
+| `--max-elevation` | `None` | Exclude areas above this elevation (meters) |
 | `--uncertainty` | `constant` | Uncertainty mode (`constant`, `none`) |
 | `--sigma-a`, `--sigma-b` | `0.5` | DEM vertical uncertainty (1σ, meters) |
 | `--sigma-coreg` | `0.3` | Co-registration uncertainty (1σ, meters) |

@@ -25,7 +25,7 @@ def run_pipeline(
     defer_output: bool | None = None,
 ) -> ProcessingResult:
     config = config or ProcessingConfig()
-    ws = stages.make_workspace(out_dir)
+    ws = stages.make_workspace(out_dir, job_id=job_id)
     inputs = Inputs(a_path=a_path, b_path=b_path)
 
     progress_enabled = False
@@ -186,7 +186,9 @@ def _run_pipeline_steps(
 
     if config.generate_report:
         try:
-            stages.generate_report(rasters, ws, config, a_info, b_info)
+            stages.generate_report(
+                rasters, ws, config, a_info, b_info, job_id=ws.job_id
+            )
         except Exception as e:
             warnings.warn(
                 f"Report generation failed: {e}. Check matplotlib installation and dependencies.",

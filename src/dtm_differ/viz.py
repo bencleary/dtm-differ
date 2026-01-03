@@ -260,8 +260,12 @@ def save_rank_png(
     ax.axis("off")
 
     legend = [
-        Patch(color="#4CAF50", label=f"Green: {t_green:.1f} ≤ magnitude < {t_amber:.1f} m"),
-        Patch(color="#FFC107", label=f"Amber: {t_amber:.1f} ≤ magnitude < {t_red:.1f} m"),
+        Patch(
+            color="#4CAF50", label=f"Green: {t_green:.1f} ≤ magnitude < {t_amber:.1f} m"
+        ),
+        Patch(
+            color="#FFC107", label=f"Amber: {t_amber:.1f} ≤ magnitude < {t_red:.1f} m"
+        ),
         Patch(color="#F44336", label=f"Red: magnitude ≥ {t_red:.1f} m"),
     ]
     ax.legend(
@@ -404,104 +408,3 @@ def save_confidence_weighted_magnitude_png(
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
-
-
-def write_html_report(
-    out_dir: Path,
-    *,
-    title: str,
-    images: list[ReportImage],
-    map_layers_dir: Path | None = None,
-    summary_html: str | None = None,
-    processing_html: str | None = None,
-) -> Path:
-    report_path = out_dir / "report.html"
-
-    map_layers_html = ""
-    if map_layers_dir is not None:
-        rel_prefix = Path("..") / map_layers_dir.name
-        layer_files = []
-        for suffix in (".tif", ".tiff", ".shp", ".gpkg"):
-            layer_files.extend(sorted(map_layers_dir.glob(f"*{suffix}")))
-
-        if layer_files:
-            items_html = "\n".join(
-                f'<li><a href="{(rel_prefix / p.name).as_posix()}">{p.name}</a></li>'
-                for p in layer_files
-            )
-            map_layers_html = f"""
-            <section class="layers">
-              <strong>Map layers</strong>
-              <ul>
-                {items_html}
-              </ul>
-            </section>
-            """.strip()
-
-    summary_block = ""
-    if summary_html:
-        summary_block = f"""
-        <section class="summary">
-          <strong>Confidence summary</strong>
-          {summary_html}
-        </section>
-        """.strip()
-
-    processing_block = ""
-    if processing_html:
-        processing_block = f"""
-        <section class="processing">
-          <strong>Processing information</strong>
-          {processing_html}
-        </section>
-        """.strip()
-
-    items = "\n".join(
-        f"""
-        <section class="card">
-          <h2>{img.title}</h2>
-          {f"<p>{img.description}</p>" if img.description else ""}
-          <a href="{img.filename}"><img src="{img.filename}" alt="{img.title}"></a>
-        </section>
-        """.strip()
-        for img in images
-    )
-
-    html = f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>{title}</title>
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; margin: 24px; color: #111; }}
-    h1 {{ margin: 0 0 16px 0; }}
-    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }}
-    .card {{ border: 1px solid #e5e5e5; border-radius: 10px; padding: 12px; background: #fff; }}
-    img {{ width: 100%; height: auto; border-radius: 8px; border: 1px solid #eee; }}
-	    p {{ margin: 8px 0 0 0; color: #333; }}
-	    .layers {{ margin: 12px 0 18px 0; padding: 12px; border: 1px solid #e5e5e5; border-radius: 10px; background: #fafafa; }}
-	    .layers ul {{ margin: 8px 0 0 18px; }}
-	    .summary {{ margin: 12px 0 18px 0; padding: 12px; border: 1px solid #e5e5e5; border-radius: 10px; background: #fafafa; }}
-	    .summary ul {{ margin: 8px 0 0 18px; }}
-	    .processing {{ margin: 12px 0 18px 0; padding: 12px; border: 1px solid #e5e5e5; border-radius: 10px; background: #fafafa; }}
-	    .processing ul {{ margin: 8px 0 0 18px; }}
-	    .processing table {{ margin: 8px 0 0 0; border-collapse: collapse; width: 100%; }}
-	    .processing th, .processing td {{ padding: 4px 8px; text-align: left; border-bottom: 1px solid #e5e5e5; }}
-	    .processing th {{ font-weight: 600; }}
-	  </style>
-	</head>
-	<body>
-	  <h1>{title}</h1>
-	  {processing_block}
-	  {map_layers_html}
-	  {summary_block}
-	  <div class="grid">
-	    {items}
-	  </div>
-	</body>
-	</html>
-"""
-
-    report_path.write_text(html, encoding="utf-8")
-    return report_path

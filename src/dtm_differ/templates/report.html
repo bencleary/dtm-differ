@@ -1,0 +1,612 @@
+{% extends "base.html" %} {% block title %}{{ job_id }} - DTM Differ Report{%
+endblock %} {% block body %}
+<!-- Header -->
+<header class="border-b border-border bg-card">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-foreground">
+                    DTM Differ Report
+                </h1>
+                <p class="text-sm text-muted-foreground mt-1">
+                    Digital Terrain Model Analysis &amp; Comparison
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-sm text-muted-foreground font-mono"
+                    >{{ job_id }}</span
+                >
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Overview Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Valid Pixels Card -->
+        <div class="bg-card border border-border rounded-lg overflow-hidden">
+            <div class="p-6 pb-3">
+                <h3 class="text-sm font-medium text-muted-foreground">
+                    Valid Pixels
+                </h3>
+            </div>
+            <div class="px-6 pb-6">
+                <div class="text-3xl font-bold text-primary">
+                    {% if total_pixels > 0 %}{{ "%.1f"|format(valid_pixels /
+                    total_pixels * 100) }}%{% else %}0%{% endif %}
+                </div>
+                <p class="text-xs text-muted-foreground mt-1">
+                    {{ "{:,}".format(valid_pixels) }} of {{
+                    "{:,}".format(total_pixels) }}
+                </p>
+            </div>
+        </div>
+
+        <!-- Mean Bias Card -->
+        <div class="bg-card border border-border rounded-lg overflow-hidden">
+            <div class="p-6 pb-3">
+                <h3 class="text-sm font-medium text-muted-foreground">
+                    Mean Bias
+                </h3>
+            </div>
+            <div class="px-6 pb-6">
+                <div class="text-3xl font-bold text-foreground">
+                    {{ "%+.3f"|format(stats.mean) }} m
+                </div>
+                <p class="text-xs text-muted-foreground mt-1">
+                    RMSE: {{ "%.3f"|format(stats.rmse) }} m
+                </p>
+            </div>
+        </div>
+
+        <!-- Detectable Changes Card -->
+        <div class="bg-card border border-border rounded-lg overflow-hidden">
+            <div class="p-6 pb-3">
+                <h3 class="text-sm font-medium text-muted-foreground">
+                    Detectable Changes
+                </h3>
+            </div>
+            <div class="px-6 pb-6">
+                {% if confidence %}
+                <div class="text-3xl font-bold text-foreground">
+                    {{ "%.1f"|format(confidence.detectable_pct) }}%
+                </div>
+                <p class="text-xs text-muted-foreground mt-1">
+                    High confidence: {{
+                    "%.1f"|format(confidence.high_confidence_pct) }}%
+                </p>
+                {% else %}
+                <div class="text-3xl font-bold text-foreground">N/A</div>
+                <p class="text-xs text-muted-foreground mt-1">
+                    Uncertainty disabled
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Information (Collapsible) -->
+    <div
+        class="bg-card border border-border rounded-lg overflow-hidden mb-8"
+        x-data="{ open: false }"
+    >
+        <button
+            @click="open = !open"
+            class="w-full p-6 pb-3 flex justify-between items-center cursor-pointer hover:bg-secondary/20 transition-colors"
+        >
+            <div class="text-left">
+                <h2 class="text-xl font-semibold text-foreground">
+                    Processing Information
+                </h2>
+                <p class="text-sm text-muted-foreground mt-1">
+                    Input parameters and configuration details
+                </p>
+            </div>
+            <svg
+                class="w-5 h-5 text-muted-foreground transition-transform"
+                :class="{ 'rotate-180': open }"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 9l-7 7-7-7"
+                ></path>
+            </svg>
+        </button>
+        <div x-show="open" x-collapse>
+            <div class="px-6 pb-6">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >Input DEM A:</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                                >{{ processing.input_a }} ({{ processing.crs_a
+                                }})</span
+                            >
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >Input DEM B:</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                                >{{ processing.input_b }} ({{ processing.crs_b
+                                }})</span
+                            >
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >Output CRS:</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                                >{{ processing.output_crs }}</span
+                            >
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >Reprojected:</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                                >{{ "Yes" if processing.reprojected else "No"
+                                }}</span
+                            >
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >Resampling method:</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                                >{{ processing.resample_method }}</span
+                            >
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >Thresholds (G/A/R):</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                                >{{ processing.thresholds[0] }}m / {{
+                                processing.thresholds[1] }}m / {{
+                                processing.thresholds[2] }}m</span
+                            >
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >Uncertainty mode:</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                                >{{ processing.uncertainty_mode }}</span
+                            >
+                        </div>
+                    </div>
+                    {% if processing.sigma_a is not none %}
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >σ (A / B / coreg):</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                                >{{ "%.2f"|format(processing.sigma_a) }}m / {{
+                                "%.2f"|format(processing.sigma_b) }}m / {{
+                                "%.2f"|format(processing.sigma_coreg) }}m</span
+                            >
+                        </div>
+                    </div>
+                    {% endif %} {% if processing.min_elevation is not none or
+                    processing.max_elevation is not none %}
+                    <div class="flex items-start gap-3 text-sm">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"
+                        ></div>
+                        <div>
+                            <span class="font-medium text-foreground"
+                                >Elevation mask:</span
+                            >
+                            <span
+                                class="text-muted-foreground font-mono text-xs ml-1"
+                            >
+                                {% if processing.min_elevation is not none and
+                                processing.max_elevation is not none %} {{
+                                "%.1f"|format(processing.min_elevation) }}m – {{
+                                "%.1f"|format(processing.max_elevation) }}m {%
+                                elif processing.min_elevation is not none %} ≥
+                                {{ "%.1f"|format(processing.min_elevation) }}m
+                                {% elif processing.max_elevation is not none %}
+                                ≤ {{ "%.1f"|format(processing.max_elevation) }}m
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistical Summary and Confidence -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Statistical Summary (Collapsible) -->
+        <div
+            class="bg-card border border-border rounded-lg overflow-hidden"
+            x-data="{ open: true }"
+        >
+            <button
+                @click="open = !open"
+                class="w-full p-6 pb-3 flex justify-between items-center cursor-pointer hover:bg-secondary/20 transition-colors"
+            >
+                <div class="text-left">
+                    <h2 class="text-xl font-semibold text-foreground">
+                        Statistical Summary
+                    </h2>
+                    <p class="text-sm text-muted-foreground mt-1">
+                        Key metrics and distribution parameters
+                    </p>
+                </div>
+                <svg
+                    class="w-5 h-5 text-muted-foreground transition-transform"
+                    :class="{ 'rotate-180': open }"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 9l-7 7-7-7"
+                    ></path>
+                </svg>
+            </button>
+            <div x-show="open" x-collapse>
+                <div class="px-6 pb-6">
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">Mean (bias)</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%+.3f"|format(stats.mean) }} m</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">Median</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%+.3f"|format(stats.median) }} m</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">Std Dev</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.3f"|format(stats.std) }} m</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">RMSE</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.3f"|format(stats.rmse) }} m</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">MAE</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.3f"|format(stats.mae) }} m</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">NMAD</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.3f"|format(stats.nmad) }} m</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">Range</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.3f"|format(stats.min) }} to {{
+                            "%.3f"|format(stats.max) }} m</span
+                        >
+                    </div>
+                    <div class="flex justify-between items-center py-2 text-sm">
+                        <span class="text-muted-foreground">Percentiles</span>
+                        <span
+                            class="font-mono font-medium text-foreground text-xs"
+                            >25th={{ "%.2f"|format(stats.p25) }}, 75th={{
+                            "%.2f"|format(stats.p75) }}, 95th={{
+                            "%.2f"|format(stats.p95) }}, 99th={{
+                            "%.2f"|format(stats.p99) }} m</span
+                        >
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Confidence Summary (Collapsible) -->
+        <div
+            class="bg-card border border-border rounded-lg overflow-hidden"
+            x-data="{ open: true }"
+        >
+            <button
+                @click="open = !open"
+                class="w-full p-6 pb-3 flex justify-between items-center cursor-pointer hover:bg-secondary/20 transition-colors"
+            >
+                <div class="text-left">
+                    <h2 class="text-xl font-semibold text-foreground">
+                        Confidence Summary
+                    </h2>
+                    <p class="text-sm text-muted-foreground mt-1">
+                        Statistical significance analysis
+                    </p>
+                </div>
+                <svg
+                    class="w-5 h-5 text-muted-foreground transition-transform"
+                    :class="{ 'rotate-180': open }"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 9l-7 7-7-7"
+                    ></path>
+                </svg>
+            </button>
+            <div x-show="open" x-collapse>
+                <div class="px-6 pb-6">
+                    {% if confidence %}
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground"
+                            >σ<sub>dh</sub> (median)</span
+                        >
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.3f"|format(confidence.sigma_dh_median) }}
+                            m</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground"
+                            >Detectable |z| ≥</span
+                        >
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ confidence.k_sigma }}</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">Within noise</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.1f"|format(confidence.within_noise_pct)
+                            }}%</span
+                        >
+                    </div>
+                    <div
+                        class="flex justify-between items-center py-2 text-sm border-b border-border/50"
+                    >
+                        <span class="text-muted-foreground">Detectable</span>
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.1f"|format(confidence.detectable_pct)
+                            }}%</span
+                        >
+                    </div>
+                    <div class="flex justify-between items-center py-2 text-sm">
+                        <span class="text-muted-foreground"
+                            >High confidence (|z| ≥ 3)</span
+                        >
+                        <span class="font-mono font-medium text-foreground"
+                            >{{ "%.1f"|format(confidence.high_confidence_pct)
+                            }}%</span
+                        >
+                    </div>
+                    {% else %}
+                    <p class="text-muted-foreground text-sm">
+                        Uncertainty analysis not enabled for this run.
+                    </p>
+                    {% endif %}
+
+                    <!-- Separator -->
+                    <div class="h-px bg-border my-4"></div>
+
+                    <!-- Movement Rank Distribution -->
+                    <h4 class="text-sm font-semibold text-foreground mb-3">
+                        Movement Rank Distribution
+                    </h4>
+
+                    <!-- Rank Bar -->
+                    <div class="rank-bar my-2">
+                        <div
+                            class="rank-bar-segment bg-secondary"
+                            style="width: {{ ranks.unclassified_pct }}%"
+                        ></div>
+                        <div
+                            class="rank-bar-segment bg-rank-green"
+                            style="width: {{ ranks.green_pct }}%"
+                        ></div>
+                        <div
+                            class="rank-bar-segment bg-rank-amber"
+                            style="width: {{ ranks.amber_pct }}%"
+                        ></div>
+                        <div
+                            class="rank-bar-segment bg-rank-red"
+                            style="width: {{ ranks.red_pct }}%"
+                        ></div>
+                    </div>
+
+                    <!-- Rank Legend -->
+                    <div class="mt-3 space-y-2">
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-medium rounded-full bg-primary text-primary-foreground w-16"
+                                    >Green</span
+                                >
+                                <span class="text-muted-foreground"
+                                    >{{ "{:,}".format(ranks.green) }}</span
+                                >
+                            </div>
+                            <span class="font-mono font-medium text-foreground"
+                                >{{ "%.1f"|format(ranks.green_pct) }}%</span
+                            >
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-medium rounded-full bg-rank-amber text-background w-16"
+                                    >Amber</span
+                                >
+                                <span class="text-muted-foreground"
+                                    >{{ "{:,}".format(ranks.amber) }}</span
+                                >
+                            </div>
+                            <span class="font-mono font-medium text-foreground"
+                                >{{ "%.1f"|format(ranks.amber_pct) }}%</span
+                            >
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-medium rounded-full bg-destructive text-destructive-foreground w-16"
+                                    >Red</span
+                                >
+                                <span class="text-muted-foreground"
+                                    >{{ "{:,}".format(ranks.red) }}</span
+                                >
+                            </div>
+                            <span class="font-mono font-medium text-foreground"
+                                >{{ "%.1f"|format(ranks.red_pct) }}%</span
+                            >
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-medium rounded-full bg-secondary text-secondary-foreground w-16"
+                                    >N/A</span
+                                >
+                                <span class="text-muted-foreground"
+                                    >{{ "{:,}".format(ranks.unclassified)
+                                    }}</span
+                                >
+                            </div>
+                            <span class="font-mono font-medium text-foreground"
+                                >{{ "%.1f"|format(ranks.unclassified_pct)
+                                }}%</span
+                            >
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visualizations -->
+    {% if images %}
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-foreground mb-2">
+            Analysis Visualizations
+        </h2>
+        <p class="text-sm text-muted-foreground">
+            Geospatial representations of terrain changes and statistical
+            significance
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+        {% for img in images %}
+        <div class="bg-card border border-border rounded-lg overflow-hidden">
+            <div class="p-6 pb-3">
+                <h3 class="text-lg font-semibold text-foreground">
+                    {{ img.title }}
+                </h3>
+                {% if img.description %}
+                <p class="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    {{ img.description }}
+                </p>
+                {% endif %}
+            </div>
+            <div class="p-0">
+                <a href="{{ img.filename }}" target="_blank">
+                    <img
+                        src="{{ img.filename }}"
+                        alt="{{ img.title }}"
+                        class="viz-image bg-secondary/20"
+                        loading="lazy"
+                    />
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Footer -->
+    <footer
+        class="mt-8 pt-4 border-t border-border text-sm text-muted-foreground"
+    >
+        Generated by DTM Differ v{{ version }} at {{ generated_at }}
+    </footer>
+</div>
+{% endblock %}

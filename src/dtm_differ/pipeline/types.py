@@ -24,10 +24,13 @@ class ProcessingConfig:
     sigma_coreg: float = 0.3
     k_sigma: float = 1.96
     suppress_within_noise_rank: bool = True
+    min_elevation: float | None = None
+    max_elevation: float | None = None
 
 
 @dataclass(frozen=True)
 class Workspace:
+    job_id: str
     out_dir: Path
     map_layers_dir: Path
     reports_dir: Path

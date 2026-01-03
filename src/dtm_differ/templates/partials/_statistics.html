@@ -1,0 +1,39 @@
+<div class="card">
+    <h3>Elevation Change Statistics</h3>
+    <div class="stat-row">
+        <span class="stat-label">Mean (bias)</span>
+        <span class="stat-value">{{ "%+.3f"|format(stats.mean) }} m</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Median</span>
+        <span class="stat-value">{{ "%+.3f"|format(stats.median) }} m</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Std Dev</span>
+        <span class="stat-value">{{ "%.3f"|format(stats.std) }} m</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">RMSE</span>
+        <span class="stat-value">{{ "%.3f"|format(stats.rmse) }} m</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">NMAD</span>
+        <span class="stat-value">{{ "%.3f"|format(stats.nmad) }} m</span>
+    </div>
+
+    <h3 style="margin-top: 16px">Movement Rank Distribution</h3>
+    <div class="rank-bar">
+        <div
+            class="unclassified"
+            style="width: {{ ranks.unclassified_pct }}%"
+        ></div>
+        <div class="green" style="width: {{ ranks.green_pct }}%"></div>
+        <div class="amber" style="width: {{ ranks.amber_pct }}%"></div>
+        <div class="red" style="width: {{ ranks.red_pct }}%"></div>
+    </div>
+    <small
+        >Unclassified: {{ ranks.unclassified_pct|round(1) }}% | Green: {{
+        ranks.green_pct|round(1) }}% | Amber: {{ ranks.amber_pct|round(1) }}% |
+        Red: {{ ranks.red_pct|round(1) }}%</small
+    >
+</div>
