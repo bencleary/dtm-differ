@@ -1,162 +1,206 @@
 # Methodology
 
-Technical details on how DTM Differ processes elevation data.
+This document explains how DTM Differ processes elevation data and how each derived output should be interpreted. The intent is to make the calculations transparent and to clarify what each step represents in practical terms.
 
-## Difference Calculation
+## Elevation Difference
 
-Elevation change is computed as:
+### What this does
+
+The core operation is a direct comparison between two terrain surfaces to quantify how elevation has changed over time.
+
+### How it is calculated
+
+Elevation change is computed on a cell-by-cell basis:
 
 ```
-dh = DEM_A - DEM_B
+dh = DEM_A − DEM_B
 ```
 
-- **Positive values**: Uplift or deposition (surface rose)
-- **Negative values**: Subsidence or erosion (surface lowered)
+DEM A is treated as the earlier surface and DEM B as the later surface.
 
-Convention: A is "before", B is "after". If your data is reversed, negate results or swap inputs.
+* Positive values indicate uplift or material accumulation
+* Negative values indicate subsidence or erosion
+
+### How to interpret it
+
+Each pixel represents the vertical change at that location between surveys. Large contiguous areas of change typically indicate real geomorphic or engineered movement, while isolated single-pixel changes are more likely to be noise.
+
+If your inputs are temporally reversed, swap the inputs or negate the output to restore the expected sign convention.
 
 ## Slope Calculation
 
-Slope uses finite differences with adaptive stencils:
+### What this does
+
+Slope describes how steep the terrain is at each pixel and is derived from the reference surface. It is used to provide context for change interpretation and to support downstream analysis.
+
+### How it is calculated
+
+Slope is calculated using finite-difference gradients:
 
 ```
-slope = arctan(√((∂z/∂x)² + (∂z/∂y)²))
+slope = arctan( √((∂z/∂x)² + (∂z/∂y)²) )
 ```
 
-The algorithm uses central differences where both neighbors exist, falling back to forward/backward differences at edges or near nodata cells. This avoids the artifacts you get from naive `np.gradient` calls near missing data.
+Central differences are used where possible. At raster edges or near nodata cells, forward or backward differences are applied instead.
+
+### Why this approach is used
+
+Simple gradient operators often produce artefacts near nodata boundaries. The adaptive stencil approach used here reduces edge effects and produces more stable slope estimates in real-world datasets.
 
 ## Uncertainty Propagation
 
-When `--uncertainty constant` is enabled (default), the tool propagates measurement uncertainty through the difference calculation.
+### What this does
 
-### Combined Uncertainty
+Uncertainty propagation quantifies how confident you can be that an observed elevation change represents real movement rather than measurement noise.
+
+### Why it matters
+
+LiDAR- and photogrammetry-derived DTMs contain vertical error. When differencing two surfaces, these errors accumulate. Treating all observed change as real can lead to false positives, particularly for small-magnitude movements.
+
+## Combined Uncertainty
+
+### What this represents
+
+Combined uncertainty expresses the expected error in the elevation difference at each pixel.
+
+### How it is calculated
 
 ```
 σ_dh = √(σ_A² + σ_B² + σ_coreg²)
 ```
 
-Where:
-- `σ_A`, `σ_B`: Vertical uncertainty of each DEM (default 0.5m)
-- `σ_coreg`: Co-registration uncertainty (default 0.3m)
+* σ_A and σ_B represent vertical uncertainty in each DEM
+* σ_coreg represents residual alignment error between surfaces
 
-### Significance Testing
+### How to interpret it
 
-A z-score is computed for each pixel:
+Higher combined uncertainty means a larger change is required before movement can be considered detectable. Default values are intentionally conservative and suitable for most airborne survey data.
+
+## Significance Assessment
+
+### What this does
+
+Significance testing converts raw elevation change into a confidence measure.
+
+### How it is calculated
+
+A z-score is computed per pixel:
 
 ```
 z = dh / σ_dh
 ```
 
-Changes are considered **detectable** when `|z| ≥ k` (default k=1.96, ~95% confidence).
+### How to interpret it
 
-### Movement Rank Suppression
+The z-score expresses change relative to expected noise. Values exceeding the configured threshold indicate that the change is unlikely to be caused by measurement uncertainty alone.
 
-By default, `movement_rank` is set to 0 for pixels where `|dh| ≤ k·σ_dh`. This prevents noise from being classified as movement. Disable with `--no-suppress-within-noise-rank`.
+The default threshold corresponds to approximately 95 percent confidence.
 
-## Elevation Masking
+## Noise Suppression
 
-Elevation-based spatial filtering allows restricting analysis to terrain zones of interest. This is particularly useful for coastal, estuarine, or variable-terrain monitoring.
+### What this does
 
-### Implementation
+Noise suppression prevents small, statistically insignificant changes from being classified as movement.
 
-When `--min-elevation` or `--max-elevation` are specified:
+### How it works
 
-1. Extract elevations from DEM **A** (the "before" reference)
-2. Create a boolean mask for pixels outside the elevation range:
-   ```
-   mask = (z_A < min_elev) | (z_A > max_elev)
-   ```
-3. Combine with existing nodata mask using logical OR
-4. Apply combined mask to all derived rasters
+Pixels where the absolute elevation change falls within the uncertainty envelope are assigned a movement rank of zero by default.
 
-### Use Cases
+### Why this is important
 
-#### Coastal Cliff Monitoring
+Without suppression, noise can be misclassified as green or amber movement, particularly in flat terrain. Suppression ensures classification maps highlight only defensible change.
 
-Exclude tidal zones and sea surface (which varies between surveys):
+## Elevation-Based Masking
 
-```bash
-# Mask everything below Mean High Water (~2m ODN for UK south coast)
-dtm-differ run --a 2023.tif --b 2024.tif --out output/ --min-elevation 2.0
-```
+### What this does
 
-**Why?** LiDAR captures the water surface at survey time. Different tidal states and wave conditions create false "changes" of tens of meters that obscure real cliff erosion signals.
+Elevation masking limits analysis to specific vertical zones of interest.
 
-#### Focused Analysis Zones
+### Why it is useful
 
-Combine `--min-elevation` and `--max-elevation` to analyze specific terrain features:
+In many environments, certain elevation ranges are expected to vary independently of true terrain change. Masking removes these areas before differencing results are interpreted.
 
-```bash
-# Analyze only the cliff zone (2-80m) excluding hilltops and sea
-dtm-differ run --a before.tif --b after.tif --out output/ \
-  --min-elevation 2.0 --max-elevation 80.0 \
-  --thresholds "0.5,1.0,2.0"  # Fine thresholds for cliff work
-```
+## Masking Logic
 
-**Typical applications:**
-- **Cliff erosion:** Focus on the active cliff face, excluding beach and inland areas
-- **River terraces:** Isolate specific terrace levels for flood/erosion analysis
-- **Mine monitoring:** Analyze individual benches by elevation range
-- **Estuarine zones:** Separate subtidal, intertidal, and supratidal areas
+### How it is applied
 
-### Choosing Elevation Thresholds
+When minimum or maximum elevation limits are provided:
 
-**For UK coastal work:**
-- Use local Mean High Water Spring (MHWS) for `--min-elevation`
-- Check Ordnance Datum (ODN) or local tide gauge data
-- Typical MHWS: 2-3m ODN for south coast, 4-5m for areas with higher tidal range
+1. Elevation values are taken from DEM A
+2. Pixels outside the specified range are flagged
+3. This mask is combined with nodata handling
+4. The combined mask is applied to all derived outputs
 
-**For other regions:**
-- Use regional vertical datum + typical high tide
-- NAVD88 (North America), AHD (Australia), EGM2008 (global geoid)
-- Check national mapping agencies for tidal datums
+### Why DEM A is used
 
-### Technical Notes
+Using the earlier surface as the reference ensures a consistent spatial frame and avoids circular logic when interpreting change.
 
-- Masking uses only DEM A elevations—ensures consistent reference frame
-- Nodata values in DEM A are handled correctly (excluded before elevation comparison)
-- Statistics in `metrics.json` reflect only the unmasked valid area
-- Edge effects at mask boundaries are minimal—no spatial filtering involved
-- Works alongside existing nodata handling—both masks combine using logical OR
+## Practical Applications
 
-## Interpreting "No Change"
+### Coastal and Cliff Monitoring
 
-The value 0 in `change_direction.tif` and `movement_rank.tif` means different things depending on uncertainty mode:
+Water surfaces captured during surveys vary with tide and wave conditions. Masking low elevations removes false changes that can otherwise dominate the results.
 
-| Mode | Meaning of 0 |
-|------|--------------|
-| `--uncertainty constant` | Change not detectable at chosen confidence level |
-| `--uncertainty none` | Magnitude below green threshold (may include noise) |
+### Targeted Terrain Analysis
 
-Always check `z_score.tif` and `within_noise_mask.tif` to understand confidence.
+Combining minimum and maximum elevation thresholds allows isolation of specific features such as cliff faces, terraces, or engineered benches.
+
+This enables finer movement thresholds to be applied where smaller changes are operationally meaningful.
+
+## Selecting Elevation Thresholds
+
+### Guidance
+
+Thresholds should be chosen using local vertical datums and known environmental conditions.
+
+For UK coastal work, Mean High Water Spring relative to Ordnance Datum is a practical lower bound. Other regions should use equivalent local tidal or vertical references.
+
+## Interpreting Zero Values
+
+### What zero means
+
+A value of zero does not always imply no movement.
+
+| Mode                 | Meaning                                |
+| -------------------- | -------------------------------------- |
+| Uncertainty enabled  | Change is not statistically detectable |
+| Uncertainty disabled | Change is below the green threshold    |
+
+### Best practice
+
+Always consult the z-score and noise mask outputs when interpreting areas with zero classification.
 
 ## Co-registration Diagnostics
 
-When reprojection occurs, the tool fits a plane to the dh surface:
+### What this does
+
+When surfaces are reprojected or aligned, a planar trend is fitted to the difference surface:
 
 ```
 dh ≈ a·x + b·y + c
 ```
 
-A non-zero tilt (large `a` or `b`) suggests residual misalignment between the DEMs. Check `metrics.json` for:
+### How to interpret it
 
-- `tilt_m_per_unit`: Gradient magnitude
-- `tilt_angle_deg`: Tilt as an angle
-- `residual_rmse_m`: Scatter after removing trend
+Significant tilt terms indicate residual misalignment rather than real terrain change. Diagnostic metrics help identify when further alignment or quality control is required.
 
-## Memory Usage
+## Memory Considerations
 
-The tool loads entire rasters into memory. Approximate peak usage:
+### How the tool behaves
 
-```
-Peak RAM ≈ 8 × (input file size)
-```
+DTM Differ loads full rasters into memory to simplify processing and ensure predictable behaviour.
 
-For a 10,000 × 10,000 float32 DEM (~400 MB), expect ~3.2 GB peak usage.
+### What to expect
 
-## Limitations
+Peak memory usage is approximately eight times the input raster size. Large datasets therefore require adequate system memory.
 
-- No chunked/streaming processing for very large files
-- Uncertainty is spatially constant (no per-pixel error maps)
-- Volume calculations not yet implemented
-- Vertical unit validation relies on CRS metadata (often missing)
+## Known Limitations
+
+### Current constraints
+
+* No streaming or tiled processing
+* Uncertainty assumed spatially constant
+* No volumetric change calculations
+* Vertical unit checks depend on CRS metadata
+
+These limitations are deliberate and prioritise clarity, reproducibility, and defensibility over maximum automation.
