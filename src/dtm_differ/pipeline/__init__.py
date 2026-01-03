@@ -32,9 +32,7 @@ def run_pipeline(
     if progress is True:
         progress_enabled = True
     elif progress is None:
-        progress_enabled = sys.stderr.isatty() and (
-            "PYTEST_CURRENT_TEST" not in os.environ
-        )
+        progress_enabled = sys.stderr.isatty() and ("PYTEST_CURRENT_TEST" not in os.environ)
 
     if defer_output is True:
         defer_output_enabled = True
@@ -57,9 +55,7 @@ def run_pipeline(
 
         # Stage-level progress; some stages (reprojection/polygonize/report) can take a long time.
         total_steps = 8
-        pbar = tqdm(
-            total=total_steps, desc="dtm-differ", unit="step", file=original_stderr
-        )
+        pbar = tqdm(total=total_steps, desc="dtm-differ", unit="step", file=original_stderr)
 
     def step(label: str) -> None:
         if pbar is None:
@@ -134,6 +130,8 @@ def run_pipeline(
 
             if exc is None:
                 db.update_job_status(job_id, status="completed")
+        else:
+            db.update_job_status(job_id, status="completed")
 
     return ProcessingResult(
         job_id=job_id,
@@ -186,9 +184,7 @@ def _run_pipeline_steps(
 
     if config.generate_report:
         try:
-            stages.generate_report(
-                rasters, ws, config, a_info, b_info, job_id=ws.job_id
-            )
+            stages.generate_report(rasters, ws, config, a_info, b_info, job_id=ws.job_id)
         except Exception as e:
             warnings.warn(
                 f"Report generation failed: {e}. Check matplotlib installation and dependencies.",

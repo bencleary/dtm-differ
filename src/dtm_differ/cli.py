@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import xdem
 
+from dtm_differ import __version__
 from dtm_differ.db import Database
 from dtm_differ.pipeline import run_pipeline
 from dtm_differ.pipeline.types import ProcessingConfig
@@ -17,6 +18,7 @@ def build_parser() -> ArgumentParser:
     parser = ArgumentParser(
         prog="dtm-differ", description="Simple DTM differencing tool for GeoTIFFs"
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -33,9 +35,7 @@ def build_parser() -> ArgumentParser:
         "⚠️  WARNING: Assumes input DEMs use meter-based vertical units. "
         "Verify your DEM vertical units match this assumption.",
     )
-    run.add_argument(
-        "--style", choices=["diverging", "terrain", "greyscale"], default="diverging"
-    )
+    run.add_argument("--style", choices=["diverging", "terrain", "greyscale"], default="diverging")
 
     run.add_argument(
         "--uncertainty",
@@ -121,9 +121,7 @@ def main() -> int:
             return 1.0, values[0], values[1]
         if len(values) == 3:
             return values[0], values[1], values[2]
-        raise ValueError(
-            "Invalid --thresholds; expected 'amber,red' or 'green,amber,red'"
-        )
+        raise ValueError("Invalid --thresholds; expected 'amber,red' or 'green,amber,red'")
 
     db = Database(DATABASE_PATH)
     db.initialise()

@@ -131,8 +131,7 @@ def _build_metrics_payload(
         "elevation_masking": {
             "min_elevation_m": config.min_elevation,
             "max_elevation_m": config.max_elevation,
-            "enabled": config.min_elevation is not None
-            or config.max_elevation is not None,
+            "enabled": config.min_elevation is not None or config.max_elevation is not None,
         },
         "alignment": {
             "occurred": r.reprojection_info.occurred,
@@ -246,12 +245,12 @@ def _estimate_planar_trend_metrics(
     flat = flat[::step]
     rows, cols = np.unravel_index(flat, dh.shape)
 
-    a = float(getattr(transform, "a"))
-    b = float(getattr(transform, "b"))
-    c = float(getattr(transform, "c"))
-    d = float(getattr(transform, "d"))
-    e = float(getattr(transform, "e"))
-    f = float(getattr(transform, "f"))
+    a = float(transform.a)
+    b = float(transform.b)
+    c = float(transform.c)
+    d = float(transform.d)
+    e = float(transform.e)
+    f = float(transform.f)
 
     x = (a * cols + b * rows + c).astype(np.float64, copy=False)
     y = (d * cols + e * rows + f).astype(np.float64, copy=False)
@@ -460,9 +459,7 @@ def compute_rasters(aligned: AlignedDems, config: ProcessingConfig) -> DerivedRa
     )
 
 
-def save_geotiff_outputs(
-    r: DerivedRasters, ws: Workspace, *, generate_polygons: bool
-) -> None:
+def save_geotiff_outputs(r: DerivedRasters, ws: Workspace, *, generate_polygons: bool) -> None:
     r.diff.save(ws.map_layers_dir / "diff.tif")
 
     def save_array(
@@ -483,9 +480,7 @@ def save_geotiff_outputs(
         # xdem expects NaN for nodata, not the nodata value itself
         # For integer types, we need to convert to float first to allow NaN
         prepared = (
-            filled.astype(np.float32)
-            if np.issubdtype(dtype, np.integer)
-            else filled.astype(dtype)
+            filled.astype(np.float32) if np.issubdtype(dtype, np.integer) else filled.astype(dtype)
         )
         if nodata is not None:
             # Use np.isclose for floating point comparison
@@ -622,9 +617,7 @@ def generate_report(
         uncertainty_mode=config.uncertainty_mode,
         sigma_a=config.sigma_a if config.uncertainty_mode == "constant" else None,
         sigma_b=config.sigma_b if config.uncertainty_mode == "constant" else None,
-        sigma_coreg=config.sigma_coreg
-        if config.uncertainty_mode == "constant"
-        else None,
+        sigma_coreg=config.sigma_coreg if config.uncertainty_mode == "constant" else None,
         min_elevation=config.min_elevation,
         max_elevation=config.max_elevation,
     )

@@ -274,9 +274,7 @@ def test_all_scenarios_generate_outputs(temp_output_dir, test_dtm_dir, db, test_
             assert filepath.exists(), f"Missing {filename} for scenario {scenario_num}"
 
             # Verify file is not empty
-            assert filepath.stat().st_size > 0, (
-                f"Empty file {filename} for scenario {scenario_num}"
-            )
+            assert filepath.stat().st_size > 0, f"Empty file {filename} for scenario {scenario_num}"
 
 
 def test_nodata_propagation_consistency(temp_output_dir, test_dtm_dir, db, test_job_id):
@@ -333,14 +331,10 @@ def test_nodata_propagation_consistency(temp_output_dir, test_dtm_dir, db, test_
 
     # Slope can have additional nodata at boundaries, but should include all original nodata
     # All original nodata locations should also be nodata in slope
-    assert np.all(
-        nodata_mask_slope[result.output_mask]
-    )  # Slope nodata includes original nodata
+    assert np.all(nodata_mask_slope[result.output_mask])  # Slope nodata includes original nodata
 
 
-def test_movement_rank_classification_ranges(
-    temp_output_dir, test_dtm_dir, db, test_job_id
-):
+def test_movement_rank_classification_ranges(temp_output_dir, test_dtm_dir, db, test_job_id):
     """Test that movement ranking uses correct threshold ranges."""
     a_path = test_dtm_dir / "scenario5_dem_a.tif"  # Has threshold boundary values
     b_path = test_dtm_dir / "scenario5_dem_b.tif"
@@ -389,9 +383,7 @@ def test_movement_rank_classification_ranges(
         assert np.all(magnitude[rank_3_mask] >= 6.0)
 
 
-def test_uncertainty_constant_outputs_exist(
-    temp_output_dir, test_dtm_dir, db, test_job_id
-):
+def test_uncertainty_constant_outputs_exist(temp_output_dir, test_dtm_dir, db, test_job_id):
     a_path = test_dtm_dir / "scenario1_dem_a.tif"
     b_path = test_dtm_dir / "scenario1_dem_b.tif"
 

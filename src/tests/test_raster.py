@@ -104,9 +104,7 @@ def test_movement_rank_thresholds(value, expected_rank):
 
 def test_movement_rank_invalid_threshold_order():
     with pytest.raises(ValueError, match="Thresholds must satisfy"):
-        generate_ranked_movement_raster(
-            np.array([[1.0]]), t_green=5.0, t_amber=3.0, t_red=6.0
-        )
+        generate_ranked_movement_raster(np.array([[1.0]]), t_green=5.0, t_amber=3.0, t_red=6.0)
 
 
 # -----------------------------------------------------------------------------

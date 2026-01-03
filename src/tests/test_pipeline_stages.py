@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-import os
-import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
-import xdem  # noqa: E402
-from rasterio.transform import from_origin  # noqa: E402
 
 from dtm_differ.pipeline.stages import compute_rasters  # noqa: E402
 from dtm_differ.pipeline.types import (  # noqa: E402
@@ -23,9 +18,7 @@ def test_compute_rasters_ranking(create_test_dem) -> None:
     diff = create_test_dem(np.array([[0.5, -1.5], [3.5, -6.5]], dtype=float))
 
     reproj_info = ReprojectionInfo(occurred=False)
-    with patch(
-        "dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff
-    ):
+    with patch("dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff):
         rasters = compute_rasters(
             AlignedDems(a_dem=a_dem, b_dem=b_dem, reprojection_info=reproj_info),
             ProcessingConfig(),
@@ -42,14 +35,10 @@ def test_compute_rasters_ranking(create_test_dem) -> None:
 def test_compute_rasters_masks_nodata(create_test_dem) -> None:
     a_dem = create_test_dem(np.zeros((2, 2), dtype=float))
     b_dem = create_test_dem(np.zeros((2, 2), dtype=float))
-    diff = create_test_dem(
-        np.array([[1.0, -9999.0], [2.0, 3.0]], dtype=float), nodata=-9999.0
-    )
+    diff = create_test_dem(np.array([[1.0, -9999.0], [2.0, 3.0]], dtype=float), nodata=-9999.0)
 
     reproj_info = ReprojectionInfo(occurred=False)
-    with patch(
-        "dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff
-    ):
+    with patch("dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff):
         rasters = compute_rasters(
             AlignedDems(a_dem=a_dem, b_dem=b_dem, reprojection_info=reproj_info),
             ProcessingConfig(),
@@ -70,9 +59,7 @@ def test_elevation_masking_min_elevation(create_test_dem) -> None:
     diff = create_test_dem(np.array([[0.5, 0.5], [0.5, 0.5]], dtype=float))
 
     reproj_info = ReprojectionInfo(occurred=False)
-    with patch(
-        "dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff
-    ):
+    with patch("dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff):
         rasters = compute_rasters(
             AlignedDems(a_dem=a_dem, b_dem=b_dem, reprojection_info=reproj_info),
             ProcessingConfig(min_elevation=2.0),  # Mask areas < 2m
@@ -99,9 +86,7 @@ def test_elevation_masking_max_elevation(create_test_dem) -> None:
     diff = create_test_dem(np.array([[0.5, 0.5], [0.5, 0.5]], dtype=float))
 
     reproj_info = ReprojectionInfo(occurred=False)
-    with patch(
-        "dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff
-    ):
+    with patch("dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff):
         rasters = compute_rasters(
             AlignedDems(a_dem=a_dem, b_dem=b_dem, reprojection_info=reproj_info),
             ProcessingConfig(max_elevation=8.0),  # Mask areas > 8m
@@ -125,14 +110,10 @@ def test_elevation_masking_both_bounds(create_test_dem) -> None:
     diff = create_test_dem(np.array([[0.5, 0.5], [0.5, 0.5]], dtype=float))
 
     reproj_info = ReprojectionInfo(occurred=False)
-    with patch(
-        "dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff
-    ):
+    with patch("dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff):
         rasters = compute_rasters(
             AlignedDems(a_dem=a_dem, b_dem=b_dem, reprojection_info=reproj_info),
-            ProcessingConfig(
-                min_elevation=2.0, max_elevation=8.0
-            ),  # Focus on 2-8m range
+            ProcessingConfig(min_elevation=2.0, max_elevation=8.0),  # Focus on 2-8m range
         )
 
     # Pixel [0,0]: elevation 1.0 < 2.0, masked
@@ -151,20 +132,12 @@ def test_elevation_masking_both_bounds(create_test_dem) -> None:
 def test_elevation_masking_with_existing_nodata(create_test_dem) -> None:
     """Test that elevation masking combines with existing nodata areas."""
     # Create DEM A with one nodata pixel and varying elevations
-    a_dem = create_test_dem(
-        np.array([[1.0, -9999.0], [5.0, 10.0]], dtype=float), nodata=-9999.0
-    )
-    b_dem = create_test_dem(
-        np.array([[1.5, -9999.0], [5.5, 10.5]], dtype=float), nodata=-9999.0
-    )
-    diff = create_test_dem(
-        np.array([[0.5, -9999.0], [0.5, 0.5]], dtype=float), nodata=-9999.0
-    )
+    a_dem = create_test_dem(np.array([[1.0, -9999.0], [5.0, 10.0]], dtype=float), nodata=-9999.0)
+    b_dem = create_test_dem(np.array([[1.5, -9999.0], [5.5, 10.5]], dtype=float), nodata=-9999.0)
+    diff = create_test_dem(np.array([[0.5, -9999.0], [0.5, 0.5]], dtype=float), nodata=-9999.0)
 
     reproj_info = ReprojectionInfo(occurred=False)
-    with patch(
-        "dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff
-    ):
+    with patch("dtm_differ.pipeline.stages.generate_difference_raster", return_value=diff):
         rasters = compute_rasters(
             AlignedDems(a_dem=a_dem, b_dem=b_dem, reprojection_info=reproj_info),
             ProcessingConfig(min_elevation=2.0),  # Also mask areas < 2m

@@ -31,7 +31,7 @@ def create_test_dem(
 
     # Prepare data: convert nodata to NaN to avoid warnings
     prepared_data = data.copy().astype(np.float32)
-    
+
     # Handle non-finite values first (NaN, inf)
     non_finite_mask = ~np.isfinite(prepared_data)
     if np.any(non_finite_mask):
@@ -40,7 +40,7 @@ def create_test_dem(
             prepared_data[non_finite_mask] = nodata
         else:
             prepared_data[non_finite_mask] = np.nan
-    
+
     # Convert nodata values to NaN before passing to xdem
     if nodata is not None:
         # Use np.isclose for floating point comparison to handle precision issues
@@ -317,11 +317,11 @@ def generate_scenario_7_mostly_nodata(out_dir: Path) -> None:
 def generate_scenario_8_no_nodata_attribute(out_dir: Path) -> None:
     """
     Scenario 8: DEMs without nodata attribute but with NaN/inf.
-    
+
     Tests:
     - DEMs with NaN values but no nodata attribute
     - DEMs with infinite values
-    
+
     Note: NaN/inf will be converted to NaN by create_test_dem, which is fine
     for testing how the pipeline handles non-finite values.
     """

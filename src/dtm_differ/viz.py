@@ -86,9 +86,7 @@ def _finite_1d(values: NDArray[Any]) -> NDArray[np.floating]:
     return arr[np.isfinite(arr)]
 
 
-def _robust_limits(
-    values: NDArray[np.floating], *, pct: float = 98.0
-) -> tuple[float, float]:
+def _robust_limits(values: NDArray[np.floating], *, pct: float = 98.0) -> tuple[float, float]:
     finite = _finite_1d(values)
     if finite.size == 0:
         return 0.0, 1.0
@@ -115,9 +113,7 @@ def save_movement_magnitude_viridis_png(
     vmin, vmax = _robust_limits(movement_magnitude_m)
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=150)
-    im = ax.imshow(
-        _masked(movement_magnitude_m, nodata_mask), cmap=cmap, vmin=vmin, vmax=vmax
-    )
+    im = ax.imshow(_masked(movement_magnitude_m, nodata_mask), cmap=cmap, vmin=vmin, vmax=vmax)
     ax.set_title(title)
     ax.axis("off")
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -149,9 +145,7 @@ def save_elevation_change_diverging_png(
             vlim = 1.0
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=150)
-    im = ax.imshow(
-        _masked(elevation_change_m, nodata_mask), cmap=cmap, vmin=-vlim, vmax=vlim
-    )
+    im = ax.imshow(_masked(elevation_change_m, nodata_mask), cmap=cmap, vmin=-vlim, vmax=vlim)
     ax.set_title(title)
     ax.axis("off")
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -260,12 +254,8 @@ def save_rank_png(
     ax.axis("off")
 
     legend = [
-        Patch(
-            color="#4CAF50", label=f"Green: {t_green:.1f} ≤ magnitude < {t_amber:.1f} m"
-        ),
-        Patch(
-            color="#FFC107", label=f"Amber: {t_amber:.1f} ≤ magnitude < {t_red:.1f} m"
-        ),
+        Patch(color="#4CAF50", label=f"Green: {t_green:.1f} ≤ magnitude < {t_amber:.1f} m"),
+        Patch(color="#FFC107", label=f"Amber: {t_amber:.1f} ≤ magnitude < {t_red:.1f} m"),
         Patch(color="#F44336", label=f"Red: magnitude ≥ {t_red:.1f} m"),
     ]
     ax.legend(
@@ -319,9 +309,7 @@ def save_z_score_diverging_png(
         fontsize=9,
         ha="left",
         va="bottom",
-        bbox=dict(
-            boxstyle="round,pad=0.3", facecolor="white", edgecolor="#ddd", alpha=0.9
-        ),
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#ddd", alpha=0.9),
     )
 
     fig.tight_layout()
@@ -400,9 +388,7 @@ def save_confidence_weighted_magnitude_png(
         fontsize=9,
         ha="left",
         va="bottom",
-        bbox=dict(
-            boxstyle="round,pad=0.3", facecolor="white", edgecolor="#ddd", alpha=0.9
-        ),
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#ddd", alpha=0.9),
     )
 
     fig.tight_layout()
