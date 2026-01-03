@@ -1,8 +1,6 @@
 """Tests for GeoTIFF handling functions."""
 
 import numpy as np
-import pytest
-import xdem
 from rasterio.transform import from_bounds
 
 from dtm_differ.geotiff import (

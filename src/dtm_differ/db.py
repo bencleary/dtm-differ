@@ -3,6 +3,8 @@ from typing import Literal
 
 
 class Database:
+    _conn: sqlite3.Connection | None = None
+
     def __init__(self, db_path):
         self.db_path = db_path
 
@@ -10,38 +12,35 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS jobs (
                 id TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """)
+        """
+        )
 
         conn.commit()
 
-        self.conn = conn
+        self._conn = conn
 
     def close(self):
         """Close the database connection."""
-        self.conn.commit()
-        self.conn.close()
+        if self._conn:
+            self._conn.commit()
+            self._conn.close()
 
     def create_job(
         self,
         job_id: str,
         status: Literal["pending", "running", "completed", "failed"] = "pending",
     ):
-        cursor = self.conn.cursor()
+        if not self._conn:
+            raise ValueError("Database connection not initialized")
 
-        # Ensure table exists (for in-memory databases)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        cursor = self._conn.cursor()
 
         cursor.execute(
             """
@@ -50,19 +49,13 @@ class Database:
             (job_id, status),
         )
 
-        self.conn.commit()
+        self._conn.commit()
 
     def get_job_status(self, job_id: str) -> str | None:
-        cursor = self.conn.cursor()
+        if not self._conn:
+            raise ValueError("Database connection not initialized")
 
-        # Ensure table exists (for in-memory databases)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        cursor = self._conn.cursor()
 
         cursor.execute(
             """
@@ -72,30 +65,16 @@ class Database:
         )
 
         row = cursor.fetchone()
-        self.conn.commit()
+        self._conn.commit()
         return row[0] if row else None
 
     def update_job_status(
         self, job_id: str, status: Literal["pending", "running", "completed", "failed"]
     ):
-        cursor = self.conn.cursor()
+        if not self._conn:
+            raise ValueError("Database connection not initialized")
 
-        # Ensure table exists (for in-memory databases)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # If job doesn't exist, create it (for tests that update before creating)
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO jobs (id, status) VALUES (?, ?)
-            """,
-            (job_id, "pending"),
-        )
+        cursor = self._conn.cursor()
 
         cursor.execute(
             """
@@ -104,10 +83,13 @@ class Database:
             (status, job_id),
         )
 
-        self.conn.commit()
+        self._conn.commit()
 
     def delete_job(self, job_id: str):
-        cursor = self.conn.cursor()
+        if not self._conn:
+            raise ValueError("Database connection not initialized")
+
+        cursor = self._conn.cursor()
 
         cursor.execute(
             """
@@ -115,4 +97,4 @@ class Database:
             """,
             (job_id,),
         )
-        self.conn.commit()
+        self._conn.commit()

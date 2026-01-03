@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import os
 import sys
+import warnings
 from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
-import warnings
+
+from dtm_differ.db import Database
 
 from . import stages
 from .types import Inputs, ProcessingConfig, ProcessingResult
 
 
 def run_pipeline(
+    db: Database,
+    job_id: str,
     a_path: Path,
     b_path: Path,
     out_dir: Path,
@@ -28,7 +32,9 @@ def run_pipeline(
     if progress is True:
         progress_enabled = True
     elif progress is None:
-        progress_enabled = sys.stderr.isatty() and ("PYTEST_CURRENT_TEST" not in os.environ)
+        progress_enabled = sys.stderr.isatty() and (
+            "PYTEST_CURRENT_TEST" not in os.environ
+        )
 
     if defer_output is True:
         defer_output_enabled = True
@@ -51,7 +57,9 @@ def run_pipeline(
 
         # Stage-level progress; some stages (reprojection/polygonize/report) can take a long time.
         total_steps = 8
-        pbar = tqdm(total=total_steps, desc="dtm-differ", unit="step", file=original_stderr)
+        pbar = tqdm(
+            total=total_steps, desc="dtm-differ", unit="step", file=original_stderr
+        )
 
     def step(label: str) -> None:
         if pbar is None:
@@ -68,6 +76,7 @@ def run_pipeline(
             ):
                 warnings_list = w
                 warnings.simplefilter("default")
+                db.update_job_status(job_id, status="running")
                 rasters = _run_pipeline_steps(
                     inputs,
                     ws,
@@ -82,8 +91,10 @@ def run_pipeline(
                     config,
                     step=step,
                 )
+                db.update_job_status(job_id, status="running")
     except BaseException as e:
         exc = e
+        db.update_job_status(job_id, status="failed")
         raise
     finally:
         if pbar is not None:
@@ -93,7 +104,6 @@ def run_pipeline(
             # mutates them during processing.
             sys.stdout = original_stdout
             sys.stderr = original_stderr
-
             out = captured_stdout.getvalue().strip()
             err = captured_stderr.getvalue().strip()
             warn_lines = []
@@ -122,7 +132,11 @@ def run_pipeline(
                 if exc is not None:
                     print(deferred_output_text, file=original_stderr)
 
+            if exc is None:
+                db.update_job_status(job_id, status="completed")
+
     return ProcessingResult(
+        job_id=job_id,
         diff=rasters.diff,
         elevation_change=rasters.elevation_change,
         change_direction=rasters.change_direction,
