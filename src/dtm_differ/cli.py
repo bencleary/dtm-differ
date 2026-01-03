@@ -78,6 +78,18 @@ def build_parser() -> ArgumentParser:
         help="Do not suppress movement_rank where |dh| <= k*sigma_dh.",
     )
     run.add_argument(
+        "--min-elevation",
+        type=float,
+        default=None,
+        help="Exclude areas below this elevation (meters). Useful for masking sea/water areas in coastal DTMs.",
+    )
+    run.add_argument(
+        "--max-elevation",
+        type=float,
+        default=None,
+        help="Exclude areas above this elevation (meters). Useful for masking hilltops or inland areas to focus on coastal zones.",
+    )
+    run.add_argument(
         "--progress",
         action=BooleanOptionalAction,
         default=None,
@@ -188,6 +200,8 @@ def main() -> int:
                     sigma_coreg=args.sigma_coreg,
                     k_sigma=args.k_sigma,
                     suppress_within_noise_rank=not args.no_suppress_within_noise_rank,
+                    min_elevation=args.min_elevation,
+                    max_elevation=args.max_elevation,
                 ),
                 progress=args.progress,
                 defer_output=args.defer_output,

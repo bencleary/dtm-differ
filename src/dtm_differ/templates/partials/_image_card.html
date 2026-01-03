@@ -1,0 +1,9 @@
+<div class="image-card card">
+    <a href="{{ img.filename }}">
+        <img src="{{ img.filename }}" alt="{{ img.title }}" loading="lazy" />
+    </a>
+    <h4>{{ img.title }}</h4>
+    {% if img.description %}
+    <p>{{ img.description }}</p>
+    {% endif %}
+</div>

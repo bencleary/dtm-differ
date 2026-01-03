@@ -5,6 +5,7 @@ description = "DTM Differ is a Python package for comparing Digital Terrain Mode
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "jinja2>=3.1.6",
     "rasterio>=1.4.4",
     "tqdm>=4.67.1",
     "xdem>=0.1.6",

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" class="dark">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{% block title %}DTM Differ Report{% endblock %}</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="//unpkg.com/alpinejs" defer></script>
+        <script>
+            tailwind.config = {
+                darkMode: "class",
+                theme: {
+                    extend: {
+                        colors: {
+                            background: "#1a1a1a",
+                            foreground: "#fafafa",
+                            card: "#262626",
+                            "card-foreground": "#fafafa",
+                            primary: "#4ade80",
+                            "primary-foreground": "#1a1a1a",
+                            secondary: "#404040",
+                            "secondary-foreground": "#fafafa",
+                            muted: "#404040",
+                            "muted-foreground": "#a3a3a3",
+                            accent: "#4ade80",
+                            "accent-foreground": "#1a1a1a",
+                            destructive: "#ef4444",
+                            "destructive-foreground": "#fafafa",
+                            border: "#404040",
+                            ring: "#4ade80",
+                            "rank-green": "#4ade80",
+                            "rank-amber": "#fbbf24",
+                            "rank-red": "#ef4444",
+                        },
+                        fontFamily: {
+                            sans: [
+                                "system-ui",
+                                "-apple-system",
+                                "Segoe UI",
+                                "Roboto",
+                                "sans-serif",
+                            ],
+                            mono: [
+                                "ui-monospace",
+                                "SF Mono",
+                                "Menlo",
+                                "Monaco",
+                                "Cascadia Mono",
+                                "monospace",
+                            ],
+                        },
+                    },
+                },
+            };
+        </script>
+        <style>
+            /* Custom styles that Tailwind doesn't handle well */
+            .rank-bar {
+                display: flex;
+                height: 1.5rem;
+                border-radius: 0.25rem;
+                overflow: hidden;
+            }
+            .rank-bar-segment {
+                transition: width 0.3s ease;
+            }
+            .viz-image {
+                width: 100%;
+                aspect-ratio: 1;
+                object-fit: contain;
+            }
+            {% block extra_styles %}{% endblock %}
+        </style>
+    </head>
+    <body class="bg-background text-foreground min-h-screen">
+        {% block body %}
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {% block content %}{% endblock %}
+        </div>
+        {% endblock %}
+    </body>
+</html>

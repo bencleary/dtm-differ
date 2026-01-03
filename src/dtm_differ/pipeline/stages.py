@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,6 @@ from dtm_differ.raster import (
     generate_z_score,
 )
 from dtm_differ.viz import (
-    ReportImage,
     save_confidence_weighted_magnitude_png,
     save_direction_png,
     save_elevation_change_diverging_png,
@@ -41,7 +41,6 @@ from dtm_differ.viz import (
     save_slope_png,
     save_within_noise_mask_png,
     save_z_score_diverging_png,
-    write_html_report,
 )
 
 from .types import AlignedDems, DerivedRasters, Inputs, ProcessingConfig, Workspace
@@ -128,6 +127,12 @@ def _build_metrics_payload(
             "sigma_coreg_m": config.sigma_coreg,
             "k_sigma": config.k_sigma,
             "suppress_within_noise_rank": config.suppress_within_noise_rank,
+        },
+        "elevation_masking": {
+            "min_elevation_m": config.min_elevation,
+            "max_elevation_m": config.max_elevation,
+            "enabled": config.min_elevation is not None
+            or config.max_elevation is not None,
         },
         "alignment": {
             "occurred": r.reprojection_info.occurred,
@@ -273,14 +278,17 @@ def _estimate_planar_trend_metrics(
     }
 
 
-def make_workspace(out_dir: Path) -> Workspace:
+def make_workspace(out_dir: Path, job_id: str = "") -> Workspace:
     out_dir.mkdir(parents=True, exist_ok=True)
     map_layers_dir = out_dir / "map_layers"
     reports_dir = out_dir / "reports"
     map_layers_dir.mkdir(parents=True, exist_ok=True)
     reports_dir.mkdir(parents=True, exist_ok=True)
     return Workspace(
-        out_dir=out_dir, map_layers_dir=map_layers_dir, reports_dir=reports_dir
+        out_dir=out_dir,
+        map_layers_dir=map_layers_dir,
+        reports_dir=reports_dir,
+        job_id=job_id,
     )
 
 
@@ -376,6 +384,18 @@ def compute_rasters(aligned: AlignedDems, config: ProcessingConfig) -> DerivedRa
 
     if diff.nodata is not None:
         output_mask |= np.asarray(data) == diff.nodata
+
+    a_data = aligned.a_dem.data
+    if np.ma.isMaskedArray(a_data):
+        a_elev = np.ma.filled(a_data, np.nan)
+    else:
+        a_elev = a_data.astype(float)
+
+    if config.min_elevation is not None:
+        output_mask |= a_elev < config.min_elevation
+
+    if config.max_elevation is not None:
+        output_mask |= a_elev > config.max_elevation
 
     elevation_change = generate_elevation_change_raster(diff)
     elevation_change[output_mask] = np.nan
@@ -557,192 +577,118 @@ def save_geotiff_outputs(
                 nodata=NODATA_RANK,
             ).polygonize(target_values=[1, 2, 3], data_column_name="class")
             polys.save(ws.map_layers_dir / "movement_ranked_polygons.shp")
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.warn(
+                f"Polygon export failed: {e}. Check GDAL/Shapefile support.",
+                UserWarning,
+                stacklevel=2,
+            )
 
 
 def generate_report(
-    r: DerivedRasters, ws: Workspace, config: ProcessingConfig, a_info=None, b_info=None
+    r: DerivedRasters,
+    ws: Workspace,
+    config: ProcessingConfig,
+    a_info=None,
+    b_info=None,
+    job_id: str = "",
 ) -> None:
-    images: list[ReportImage] = []
-    summary_html: str | None = None
-    processing_html: str | None = None
+    """Generate HTML report using Jinja2 templates."""
+    from datetime import datetime
 
-    # Build processing metadata HTML
-    processing_items = []
+    from dtm_differ.report import (
+        ConfidenceSummary,
+        ElevationStats,
+        ProcessingInfo,
+        RankDistribution,
+        ReportData,
+        ReportImage,
+        render_report,
+    )
 
     metrics_payload = _build_metrics_payload(r, config, a_info=a_info, b_info=b_info)
     dh_metrics = metrics_payload["dh_metrics"]
-    coreg_metrics = metrics_payload["coregistration_check"]
 
-    # Input file information
-    if a_info and b_info:
-        processing_items.append(
-            f"<li><strong>Input DEM A:</strong> {a_info.path.name} (CRS: {a_info.crs})</li>"
-        )
-        processing_items.append(
-            f"<li><strong>Input DEM B:</strong> {b_info.path.name} (CRS: {b_info.crs})</li>"
-        )
-        if getattr(a_info, "linear_unit_name", None):
-            processing_items.append(
-                f"<li><strong>DEM A linear units:</strong> {a_info.linear_unit_name}</li>"
-            )
-        if getattr(b_info, "linear_unit_name", None):
-            processing_items.append(
-                f"<li><strong>DEM B linear units:</strong> {b_info.linear_unit_name}</li>"
-            )
-
-    # Output CRS
-    if r.diff.crs:
-        output_crs = (
-            str(r.diff.crs) if hasattr(r.diff.crs, "__str__") else repr(r.diff.crs)
-        )
-        processing_items.append(f"<li><strong>Output CRS:</strong> {output_crs}</li>")
-
-    # Reprojection information
-    if r.reprojection_info.occurred:
-        processing_items.append("<li><strong>Reprojection:</strong> Yes</li>")
-        if r.reprojection_info.source_crs_a:
-            processing_items.append(
-                f"<li><strong>Source CRS (A):</strong> {r.reprojection_info.source_crs_a}</li>"
-            )
-        if r.reprojection_info.source_crs_b:
-            processing_items.append(
-                f"<li><strong>Source CRS (B):</strong> {r.reprojection_info.source_crs_b}</li>"
-            )
-        if r.reprojection_info.target_crs:
-            processing_items.append(
-                f"<li><strong>Target CRS:</strong> {r.reprojection_info.target_crs}</li>"
-            )
-        if r.reprojection_info.resampling_method:
-            processing_items.append(
-                f"<li><strong>Resampling method:</strong> {r.reprojection_info.resampling_method}</li>"
-            )
-        if r.reprojection_info.reference_grid:
-            processing_items.append(
-                f"<li><strong>Reference grid:</strong> {r.reprojection_info.reference_grid}</li>"
-            )
-        if r.reprojection_info.reason:
-            processing_items.append(
-                f"<li><strong>Reason:</strong> {r.reprojection_info.reason}</li>"
-            )
-    else:
-        processing_items.append(
-            "<li><strong>Reprojection:</strong> No (DEMs were compatible)</li>"
-        )
-
-    # Processing configuration
-    processing_items.append(
-        f"<li><strong>Resampling method:</strong> {config.resample}</li>"
-    )
-    processing_items.append(
-        f"<li><strong>Alignment reference:</strong> {config.align}</li>"
-    )
-    processing_items.append(
-        f"<li><strong>Movement thresholds:</strong> Green={config.t_green:.1f}m, Amber={config.t_amber:.1f}m, Red={config.t_red:.1f}m</li>"
+    # Build ProcessingInfo
+    processing = ProcessingInfo(
+        input_a=a_info.path.name if a_info else "unknown",
+        input_b=b_info.path.name if b_info else "unknown",
+        crs_a=a_info.crs if a_info else "unknown",
+        crs_b=b_info.crs if b_info else "unknown",
+        output_crs=str(r.diff.crs) if r.diff.crs else "unknown",
+        reprojected=r.reprojection_info.occurred,
+        resample_method=config.resample,
+        thresholds=(config.t_green, config.t_amber, config.t_red),
+        uncertainty_mode=config.uncertainty_mode,
+        sigma_a=config.sigma_a if config.uncertainty_mode == "constant" else None,
+        sigma_b=config.sigma_b if config.uncertainty_mode == "constant" else None,
+        sigma_coreg=config.sigma_coreg
+        if config.uncertainty_mode == "constant"
+        else None,
+        min_elevation=config.min_elevation,
+        max_elevation=config.max_elevation,
     )
 
-    # Uncertainty configuration
-    if config.uncertainty_mode == "constant":
-        processing_items.append(f"<li><strong>Uncertainty mode:</strong> Constant</li>")
-        processing_items.append(
-            f"<li><strong>σ<sub>A</sub>:</strong> {config.sigma_a:.3f} m</li>"
-        )
-        processing_items.append(
-            f"<li><strong>σ<sub>B</sub>:</strong> {config.sigma_b:.3f} m</li>"
-        )
-        processing_items.append(
-            f"<li><strong>σ<sub>coreg</sub>:</strong> {config.sigma_coreg:.3f} m</li>"
-        )
-        processing_items.append(
-            f"<li><strong>k (significance threshold):</strong> {config.k_sigma:g}</li>"
-        )
-        processing_items.append(
-            f"<li><strong>Suppress within-noise ranks:</strong> {'Yes' if config.suppress_within_noise_rank else 'No'}</li>"
-        )
-    else:
-        processing_items.append("<li><strong>Uncertainty mode:</strong> None ⚠️</li>")
-        processing_items.append(
-            "<li><em>Uncertainty analysis not performed. Results may include noise-level changes.</em></li>"
-        )
+    # Build ElevationStats
+    stats = ElevationStats(
+        mean=dh_metrics.get("mean_m", 0.0),
+        median=dh_metrics.get("median_m", 0.0),
+        std=dh_metrics.get("std_m", 0.0),
+        rmse=dh_metrics.get("rmse_m", 0.0),
+        mae=dh_metrics.get("mae_m", 0.0),
+        nmad=dh_metrics.get("nmad_m", 0.0),
+        min=dh_metrics.get("min_m", 0.0),
+        max=dh_metrics.get("max_m", 0.0),
+        p25=dh_metrics.get("p25_m", 0.0),
+        p75=dh_metrics.get("p75_m", 0.0),
+        p95=dh_metrics.get("p95_m", 0.0),
+        p99=dh_metrics.get("p99_m", 0.0),
+    )
 
-    # Add statistical summary
+    # Build RankDistribution
     valid_mask = ~r.output_mask
-    valid_pct = float(dh_metrics["valid_fraction"]) * 100.0
-    processing_items.append(
-        f"<li><strong>Valid pixels:</strong> {valid_pct:.1f}% ({dh_metrics['n_valid']:,} of {dh_metrics['n_total']:,})</li>"
-    )
-
-    if coreg_metrics is not None:
-        processing_items.append(
-            "<li><strong>Co-registration check (planar trend in dh):</strong></li>"
-        )
-        processing_items.append(
-            "<li style='margin-left: 20px;'>"
-            f"Samples: {coreg_metrics['n_samples']:,}, "
-            f"Residual RMSE: {coreg_metrics['residual_rmse_m']:.3f} m"
-            "</li>"
-        )
-        processing_items.append(
-            "<li style='margin-left: 20px;'>"
-            f"Tilt magnitude: {coreg_metrics['tilt_m_per_unit']:.3e} m/unit "
-            f"(tilt angle ~ {coreg_metrics['tilt_angle_deg']:.4f}°)"
-            "</li>"
-        )
-
-    if "mean_m" in dh_metrics:
-        processing_items.append(
-            "<li><strong>Elevation change statistics (dh):</strong></li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>Mean (bias): {dh_metrics['mean_m']:+.3f} m</li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>Median: {dh_metrics['median_m']:+.3f} m</li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>Std dev: {dh_metrics['std_m']:.3f} m</li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>RMSE: {dh_metrics['rmse_m']:.3f} m</li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>MAE: {dh_metrics['mae_m']:.3f} m</li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>NMAD: {dh_metrics['nmad_m']:.3f} m</li>"
-        )
-        processing_items.append(
-            "<li style='margin-left: 20px;'>"
-            f"Percentiles: 25th={dh_metrics['p25_m']:+.3f}, 50th={dh_metrics['p50_m']:+.3f}, "
-            f"75th={dh_metrics['p75_m']:+.3f}, 95th={dh_metrics['p95_m']:+.3f}, 99th={dh_metrics['p99_m']:+.3f} m"
-            "</li>"
-        )
-
-    # Movement rank distribution
     valid_rank = r.movement_rank[valid_mask]
+    valid_n = int(dh_metrics["n_valid"]) if dh_metrics["n_valid"] > 0 else 1
+
     rank_0 = int(np.sum(valid_rank == 0))
     rank_1 = int(np.sum(valid_rank == 1))
     rank_2 = int(np.sum(valid_rank == 2))
     rank_3 = int(np.sum(valid_rank == 3))
-    if int(dh_metrics["n_valid"]) > 0:
-        processing_items.append("<li><strong>Movement rank distribution:</strong></li>")
-        valid_n = int(dh_metrics["n_valid"])
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>Unclassified (0): {rank_0:,} ({rank_0 / valid_n * 100:.1f}%)</li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>Green (1): {rank_1:,} ({rank_1 / valid_n * 100:.1f}%)</li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>Amber (2): {rank_2:,} ({rank_2 / valid_n * 100:.1f}%)</li>"
-        )
-        processing_items.append(
-            f"<li style='margin-left: 20px;'>Red (3): {rank_3:,} ({rank_3 / valid_n * 100:.1f}%)</li>"
-        )
 
-    if processing_items:
-        processing_html = f"<ul>{''.join(processing_items)}</ul>"
+    ranks = RankDistribution(
+        unclassified=rank_0,
+        unclassified_pct=rank_0 / valid_n * 100,
+        green=rank_1,
+        green_pct=rank_1 / valid_n * 100,
+        amber=rank_2,
+        amber_pct=rank_2 / valid_n * 100,
+        red=rank_3,
+        red_pct=rank_3 / valid_n * 100,
+    )
+
+    # Build ConfidenceSummary (if uncertainty enabled)
+    confidence: ConfidenceSummary | None = None
+    if (
+        r.z_score is not None
+        and r.within_noise_mask is not None
+        and r.sigma_dh is not None
+        and config.uncertainty_mode != "none"
+    ):
+        valid = (~r.output_mask) & np.isfinite(r.z_score)
+        if np.any(valid):
+            within_noise = r.within_noise_mask == 1
+            absz = np.abs(r.z_score)
+
+            confidence = ConfidenceSummary(
+                sigma_dh_median=float(np.nanmedian(r.sigma_dh)),
+                k_sigma=config.k_sigma,
+                within_noise_pct=float(np.mean(within_noise[valid]) * 100.0),
+                detectable_pct=float(np.mean(absz[valid] >= config.k_sigma) * 100.0),
+                high_confidence_pct=float(np.mean(absz[valid] >= 3.0) * 100.0),
+            )
+
+    # Generate images
+    images: list[ReportImage] = []
 
     movement_png = "movement_magnitude_green_to_red.png"
     save_movement_magnitude_viridis_png(
@@ -762,7 +708,9 @@ def generate_report(
 
     slope_png = "slope_degrees.png"
     save_slope_png(
-        r.slope_deg, nodata_mask=r.output_mask, out_path=ws.reports_dir / slope_png
+        r.slope_deg,
+        nodata_mask=r.output_mask,
+        out_path=ws.reports_dir / slope_png,
     )
     images.append(ReportImage(slope_png, "Slope (degrees)"))
 
@@ -789,32 +737,8 @@ def generate_report(
     )
     images.append(ReportImage(rank_png, "Ranked movement (G/A/R)"))
 
-    if (
-        r.z_score is not None
-        and r.within_noise_mask is not None
-        and r.sigma_dh is not None
-        and config.uncertainty_mode != "none"
-    ):
-        valid = (~r.output_mask) & np.isfinite(r.z_score)
-        if np.any(valid):
-            within_noise = r.within_noise_mask == 1
-            within_noise_pct = float(np.mean(within_noise[valid]) * 100.0)
-
-            absz = np.abs(r.z_score)
-            detectable_pct = float(np.mean(absz[valid] >= config.k_sigma) * 100.0)
-            high_pct = float(np.mean(absz[valid] >= 3.0) * 100.0)
-            sigma_med = float(np.nanmedian(r.sigma_dh))
-
-            summary_html = f"""
-            <ul>
-              <li>Assumed σ<sub>dh</sub> (median): {sigma_med:.3f} m</li>
-              <li>Detectable if |z| ≥ {config.k_sigma:g}</li>
-              <li>Within noise: {within_noise_pct:.1f}%</li>
-              <li>Detectable: {detectable_pct:.1f}%</li>
-              <li>High confidence (|z| ≥ 3): {high_pct:.1f}%</li>
-            </ul>
-            """.strip()
-
+    # Uncertainty-specific images
+    if confidence is not None:
         conf_mag_png = "movement_magnitude_confidence_weighted.png"
         save_confidence_weighted_magnitude_png(
             r.change_magnitude,
@@ -826,7 +750,7 @@ def generate_report(
             ReportImage(
                 conf_mag_png,
                 "Movement magnitude (confidence-weighted)",
-                "Same magnitude map, but low |z| areas are faded (less reliable).",
+                "Low |z| areas are faded (less reliable).",
             )
         )
 
@@ -841,7 +765,7 @@ def generate_report(
             ReportImage(
                 z_png,
                 "Significance (z-score)",
-                f"z = dh/σ. Detectable changes satisfy |z| ≥ {config.k_sigma:g}.",
+                f"Detectable changes satisfy |z| ≥ {config.k_sigma:g}.",
             )
         )
 
@@ -856,15 +780,22 @@ def generate_report(
             ReportImage(
                 wn_png,
                 "Within noise mask",
-                "Grey pixels indicate changes that are not detectable at the chosen k threshold.",
+                "Grey = not detectable at chosen threshold.",
             )
         )
 
-    write_html_report(
-        ws.reports_dir,
-        title="dtm-differ report",
+    # Build ReportData and render
+    report_data = ReportData(
+        job_id=job_id,
+        generated_at=datetime.now(),
+        version="0.1.0",
+        processing=processing,
+        stats=stats,
+        ranks=ranks,
+        confidence=confidence,
         images=images,
-        map_layers_dir=ws.map_layers_dir,
-        summary_html=summary_html,
-        processing_html=processing_html,
+        valid_pixels=int(dh_metrics["n_valid"]),
+        total_pixels=int(dh_metrics["n_total"]),
     )
+
+    render_report(report_data, ws.reports_dir)
