@@ -3,11 +3,10 @@ from typing import Literal
 
 import numpy as np
 import rasterio
-from rasterio.errors import CRSError
-from rasterio.errors import RasterioIOError
+import xdem
+from rasterio.errors import CRSError, RasterioIOError
 
 from dtm_differ.types import GeoTiffBounds, GeotiffInformation, RasterCompatability
-import xdem
 
 
 def _normalize_linear_units_factor(value: object) -> float | None:
@@ -58,7 +57,7 @@ def validate_geotiff(geotiff_path: str) -> None:
             if src.crs is None:
                 raise ValueError("No CRS")
     except RasterioIOError as e:
-        raise ValueError(f"Invalid GeoTIFF file: {geotiff_path} - {e}")
+        raise ValueError(f"Invalid GeoTIFF file: {geotiff_path} - {e}") from e
 
 
 def get_geotiff_metadata(geotiff_path: str) -> tuple[GeotiffInformation, xdem.DEM]:
@@ -141,7 +140,7 @@ def check_raster_compatability(a: GeotiffInformation, b: GeotiffInformation) -> 
 
     Returns:
         RasterCompatability: The compatibility of the two rasters
-    
+
     Throws:
         ValueError: If the two rasters are not compatible
     """
@@ -184,7 +183,7 @@ def reproject_raster(
 
     Throws:
         ValueError: If the direction is invalid
-    """    
+    """
     match direction:
         case "to-a":
             return b.reproject(ref=a, resampling=resampling)

@@ -188,9 +188,7 @@ def test_rank_distribution_percentages():
     )
     assert ranks.green == 600
     assert ranks.green_pct == 60.0
-    total_pct = (
-        ranks.unclassified_pct + ranks.green_pct + ranks.amber_pct + ranks.red_pct
-    )
+    total_pct = ranks.unclassified_pct + ranks.green_pct + ranks.amber_pct + ranks.red_pct
     assert total_pct == 100.0
 
 

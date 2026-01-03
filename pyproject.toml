@@ -1,15 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "dtm-differ"
 version = "0.1.0"
 description = "DTM Differ is a Python package for comparing Digital Terrain Models (DTMs). It provides a command-line interface for generating test DTMs and comparing them."
 readme = "README.md"
 requires-python = ">=3.13"
+license = {text = "MIT"}
+authors = [
+    {name = "Ben Cleary"}
+]
+keywords = ["geospatial", "dtm", "dem", "terrain", "change-detection", "gis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+]
 dependencies = [
     "jinja2>=3.1.6",
     "rasterio>=1.4.4",
     "tqdm>=4.67.1",
     "xdem>=0.1.6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/bencleary/dtm-differ"
+Repository = "https://github.com/bencleary/dtm-differ"
+Issues = "https://github.com/bencleary/dtm-differ/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=7.0", "pytest-cov>=4.0"]
@@ -21,4 +43,31 @@ dtm-differ-generate-test-dtms = "dtm_differ.generate_test_dtms:generate_all_scen
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ruff>=0.8.0",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",    # line too long (handled by formatter)
+    "SIM108",  # ternary operators can reduce readability
+    "SIM102",  # nested ifs sometimes clearer than combined conditions
+    "SIM103",  # explicit return True/False can be clearer
+    "SIM117",  # nested with can be clearer for error handling
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

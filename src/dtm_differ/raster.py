@@ -66,9 +66,7 @@ def generate_within_noise_mask_u8(
 ) -> NDArray[np.uint8]:
     within = np.zeros(dh.shape, dtype=np.uint8)
     valid = (~output_mask) & np.isfinite(dh) & np.isfinite(sigma_dh) & (sigma_dh > 0)
-    within[valid] = (np.abs(dh[valid]) <= (float(k_sigma) * sigma_dh[valid])).astype(
-        np.uint8
-    )
+    within[valid] = (np.abs(dh[valid]) <= (float(k_sigma) * sigma_dh[valid])).astype(np.uint8)
     return within
 
 
