@@ -42,6 +42,7 @@ class Inputs:
 @dataclass(frozen=True)
 class ReprojectionInfo:
     """Metadata about reprojection/resampling operations."""
+
     occurred: bool
     source_crs_a: str | None = None
     source_crs_b: str | None = None
@@ -73,9 +74,9 @@ class DerivedRasters:
     reprojection_info: ReprojectionInfo
 
 
-
 @dataclass(frozen=True)
 class ProcessingResult:
+    job_id: str
     diff: xdem.DEM
     elevation_change: NDArray[np.floating]
     change_direction: NDArray[np.int8]

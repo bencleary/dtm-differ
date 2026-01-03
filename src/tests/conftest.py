@@ -1,4 +1,5 @@
 import tempfile
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +7,8 @@ import pytest
 import xdem
 from numpy.typing import NDArray
 from rasterio.transform import from_bounds, from_origin
+
+from dtm_differ.db import Database
 
 _repo_root = Path(__file__).resolve().parents[2]
 
@@ -73,3 +76,17 @@ def make_test_dem(
 @pytest.fixture
 def create_test_dem():
     return make_test_dem
+
+
+@pytest.fixture
+def test_db():
+    """Create an in-memory database for testing."""
+    db = Database(":memory:")
+    db.initialise()
+    return db
+
+
+@pytest.fixture
+def test_job_id():
+    """Generate a unique job ID for testing."""
+    return str(uuid.uuid4())
