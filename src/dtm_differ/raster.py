@@ -3,6 +3,24 @@ import xdem
 from numpy.typing import NDArray
 
 
+def _to_float_array(data: NDArray, nodata: float | None = None) -> NDArray[np.floating]:
+    """
+    Convert a possibly-masked array to a plain float array with NaN for missing values.
+
+    This centralizes the masked-array handling that was previously duplicated
+    across several functions.
+    """
+    if np.ma.isMaskedArray(data):
+        arr = np.ma.filled(data.astype(float), np.nan)
+    else:
+        arr = data.astype(float)
+
+    if nodata is not None:
+        arr[arr == nodata] = np.nan
+
+    return arr
+
+
 def generate_difference_raster(a: xdem.DEM, b: xdem.DEM) -> xdem.DEM:
     """
     Generate a difference raster between two DEMs.
@@ -10,8 +28,7 @@ def generate_difference_raster(a: xdem.DEM, b: xdem.DEM) -> xdem.DEM:
     Returns:
         xdem.DEM: The difference raster
     """
-    diff = a - b
-    return diff
+    return a - b
 
 
 def generate_difference_sigma_constant(
@@ -56,39 +73,19 @@ def generate_within_noise_mask_u8(
 
 
 def generate_elevation_change_raster(diff: xdem.DEM) -> NDArray[np.floating]:
-    """
-    Generate an elevation change raster from a difference raster.
-
-    Returns:
-        NDArray[np.floating]: The elevation change array (nodata converted to NaN)
-    """
-    data = diff.data
-    # Convert masked array to regular array with NaN
-    if np.ma.isMaskedArray(data):
-        elevation_change = np.ma.filled(data.astype(float), np.nan)
-    else:
-        elevation_change = data.astype(float)
-
-    nodata = diff.nodata
-    if nodata is not None:
-        elevation_change[elevation_change == nodata] = np.nan
-    return elevation_change
+    """Extract elevation change as a float array (nodata becomes NaN)."""
+    return _to_float_array(diff.data, nodata=diff.nodata)
 
 
 def generate_change_direction_raster(diff: xdem.DEM) -> NDArray[np.int8]:
     """
-    Generate a change direction raster from a difference raster.
-
-    Returns:
-        NDArray[np.int8]: The change direction array (-1, 0, 1)
+    Classify each cell as uplift (+1), subsidence (-1), or no change (0).
     """
     direction = np.zeros_like(diff.data, dtype=np.int8)
-    if diff.nodata is None:
-        direction[diff.data > 0] = 1
-        direction[diff.data < 0] = -1
-        return direction
+    nodata_mask = np.zeros_like(diff.data, dtype=bool)
+    if diff.nodata is not None:
+        nodata_mask = diff.data == diff.nodata
 
-    nodata_mask = diff.data == diff.nodata
     direction[(diff.data > 0) & ~nodata_mask] = 1
     direction[(diff.data < 0) & ~nodata_mask] = -1
     return direction
@@ -102,26 +99,17 @@ def generate_change_direction_from_dh(
     k_sigma: float | None = None,
 ) -> NDArray[np.int8]:
     """
-    Generate a direction raster (-1, 0, 1) from a dh array.
+    Direction from dh array, optionally filtered by detectability threshold.
 
-    If sigma is provided, only changes that are *detectable* at the chosen k threshold
-    are assigned a direction; otherwise direction is 0.
-
-    Args:
-        dh: Elevation change array in meters (NaN for nodata).
-        output_mask: Boolean mask where outputs should be treated as nodata.
-        sigma_dh: Per-pixel 1σ uncertainty for dh (meters).
-        k_sigma: Detectability multiplier k; changes are detectable if |dh| > k·σ.
-
-    Returns:
-        Direction array: -1 (negative), 0 (not detectable / no change), 1 (positive).
+    When sigma_dh and k_sigma are provided, only changes exceeding k·σ
+    are assigned a direction; everything else is marked as 0.
     """
     direction = np.zeros(dh.shape, dtype=np.int8)
     valid = (~output_mask) & np.isfinite(dh)
 
     if sigma_dh is not None and k_sigma is not None and float(k_sigma) > 0:
         sigma_ok = np.isfinite(sigma_dh) & (sigma_dh > 0)
-        detectable = valid & sigma_ok & (np.abs(dh) > (float(k_sigma) * sigma_dh))
+        detectable = valid & sigma_ok & (np.abs(dh) > float(k_sigma) * sigma_dh)
     else:
         detectable = valid & (dh != 0)
 
@@ -131,23 +119,8 @@ def generate_change_direction_from_dh(
 
 
 def generate_change_magnitude_raster(diff: xdem.DEM) -> NDArray[np.floating]:
-    """
-    Generate a change magnitude raster from a difference raster.
-
-    Returns:
-        NDArray[np.floating]: The absolute elevation change array (nodata converted to NaN)
-    """
-    data = diff.data
-    # Convert masked array to regular array with NaN
-    if np.ma.isMaskedArray(data):
-        data_float = np.ma.filled(data.astype(float), np.nan)
-    else:
-        data_float = data.astype(float)
-
-    magnitude = np.abs(data_float)
-    if diff.nodata is not None:
-        magnitude[diff.data == diff.nodata] = np.nan
-    return magnitude
+    """Absolute elevation change (nodata becomes NaN)."""
+    return np.abs(_to_float_array(diff.data, nodata=diff.nodata))
 
 
 def generate_ranked_movement_raster(
@@ -158,101 +131,68 @@ def generate_ranked_movement_raster(
     t_red: float = 6.0,
 ) -> NDArray[np.uint8]:
     """
-    Rank movement magnitude into Green/Amber/Red classes.
-
-    Class meanings:
-        0: below thresholds / unclassified
-        1: green  (t_green <= mag < t_amber)
-        2: amber  (t_amber <= mag < t_red)
-        3: red    (mag >= t_red)
+    Classify magnitude into risk tiers: 0=below threshold, 1=green, 2=amber, 3=red.
     """
     if not (0 <= t_green <= t_amber <= t_red):
         raise ValueError("Thresholds must satisfy 0 <= t_green <= t_amber <= t_red")
 
-    class_raster = np.zeros_like(movement_magnitude, dtype=np.uint8)
-    class_raster[(movement_magnitude >= t_green) & (movement_magnitude < t_amber)] = 1
-    class_raster[(movement_magnitude >= t_amber) & (movement_magnitude < t_red)] = 2
-    class_raster[movement_magnitude >= t_red] = 3
-    return class_raster
+    rank = np.zeros_like(movement_magnitude, dtype=np.uint8)
+    rank[(movement_magnitude >= t_green) & (movement_magnitude < t_amber)] = 1
+    rank[(movement_magnitude >= t_amber) & (movement_magnitude < t_red)] = 2
+    rank[movement_magnitude >= t_red] = 3
+    return rank
 
 
 def generate_slope_degrees_raster(dem: xdem.DEM) -> NDArray[np.floating]:
     """
-    Estimate slope angle (degrees) from a DEM using finite differences.
+    Compute slope angle in degrees using finite differences.
 
-    Notes:
-        This implementation is nodata-aware: it avoids differencing across NaN/nodata
-        boundaries by falling back to forward/backward differences when needed.
+    Uses central differences where possible, falling back to forward/backward
+    differences at edges or near nodata cells.
     """
     try:
         dx, dy = dem.res
-    except (AttributeError, TypeError, ValueError) as e:
-        import warnings
-
-        warnings.warn(f"Could not get DEM resolution, using 1.0: {e}")
+    except (AttributeError, TypeError, ValueError):
         dx = dy = 1.0
 
-    dx = float(abs(dx))
-    dy = float(abs(dy))
+    dx, dy = float(abs(dx)), float(abs(dy))
 
-    # Convert masked array to regular array with NaN
-    data = dem.data
-    if np.ma.isMaskedArray(data):
-        z = np.ma.filled(data.astype(float), np.nan)
-    else:
-        z = data.astype(float)
+    z = _to_float_array(dem.data, nodata=dem.nodata)
 
-    if dem.nodata is not None:
-        z[z == dem.nodata] = np.nan
-
-    # Build 4-neighbour arrays with NaN padding at edges.
+    # Build neighbor arrays (NaN-padded at edges)
     left = np.empty_like(z)
-    right = np.empty_like(z)
-    up = np.empty_like(z)
-    down = np.empty_like(z)
-
     left[:, 0] = np.nan
     left[:, 1:] = z[:, :-1]
+
+    right = np.empty_like(z)
     right[:, -1] = np.nan
     right[:, :-1] = z[:, 1:]
+
+    up = np.empty_like(z)
     up[0, :] = np.nan
     up[1:, :] = z[:-1, :]
+
+    down = np.empty_like(z)
     down[-1, :] = np.nan
     down[:-1, :] = z[1:, :]
 
-    z_finite = np.isfinite(z)
-    left_f = np.isfinite(left)
-    right_f = np.isfinite(right)
-    up_f = np.isfinite(up)
-    down_f = np.isfinite(down)
+    z_ok = np.isfinite(z)
+    l_ok, r_ok = np.isfinite(left), np.isfinite(right)
+    u_ok, d_ok = np.isfinite(up), np.isfinite(down)
 
     dzdx = np.full(z.shape, np.nan, dtype=np.float32)
     dzdy = np.full(z.shape, np.nan, dtype=np.float32)
 
-    # Central difference when both neighbours exist; otherwise fallback to forward/backward.
-    central_x = left_f & right_f
-    forward_x = (~left_f) & right_f & z_finite
-    backward_x = left_f & (~right_f) & z_finite
+    # X gradient
+    dzdx[l_ok & r_ok] = ((right - left) / (2 * dx))[l_ok & r_ok]
+    dzdx[~l_ok & r_ok & z_ok] = ((right - z) / dx)[~l_ok & r_ok & z_ok]
+    dzdx[l_ok & ~r_ok & z_ok] = ((z - left) / dx)[l_ok & ~r_ok & z_ok]
 
-    dzdx[central_x] = ((right - left) / (2.0 * dx))[central_x].astype(
-        np.float32, copy=False
-    )
-    dzdx[forward_x] = ((right - z) / dx)[forward_x].astype(np.float32, copy=False)
-    dzdx[backward_x] = ((z - left) / dx)[backward_x].astype(np.float32, copy=False)
+    # Y gradient
+    dzdy[u_ok & d_ok] = ((down - up) / (2 * dy))[u_ok & d_ok]
+    dzdy[~u_ok & d_ok & z_ok] = ((down - z) / dy)[~u_ok & d_ok & z_ok]
+    dzdy[u_ok & ~d_ok & z_ok] = ((z - up) / dy)[u_ok & ~d_ok & z_ok]
 
-    central_y = up_f & down_f
-    forward_y = (~up_f) & down_f & z_finite
-    backward_y = up_f & (~down_f) & z_finite
-
-    dzdy[central_y] = ((down - up) / (2.0 * dy))[central_y].astype(
-        np.float32, copy=False
-    )
-    dzdy[forward_y] = ((down - z) / dy)[forward_y].astype(np.float32, copy=False)
-    dzdy[backward_y] = ((z - up) / dy)[backward_y].astype(np.float32, copy=False)
-
-    slope_rad = np.arctan(np.sqrt(dzdx**2 + dzdy**2))
-    slope_deg = np.degrees(slope_rad)
-
-    slope_deg[~z_finite] = np.nan
-
+    slope_deg = np.degrees(np.arctan(np.sqrt(dzdx**2 + dzdy**2)))
+    slope_deg[~z_ok] = np.nan
     return slope_deg
