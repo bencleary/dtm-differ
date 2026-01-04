@@ -1,3 +1,7 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 # DTM Differ
 
 DTM Differ is a command-line utility for quantifying elevation change between Digital Terrain Models. It is designed for geotechnical and environmental monitoring workflows, including subsidence assessment, erosion analysis, and cut and fill evaluation.
